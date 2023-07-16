@@ -1,0 +1,11 @@
+{
+  "endOfLine": "lf",
+  "printWidth": 110,
+  "singleQuote": true,
+  "semi": false,
+  "useTabs": false,
+  "trailingComma": "es5",
+  "embeddedLanguageFormatting": "auto",
+  "arrowParens": "avoid",
+  "proseWrap": "never"
+}

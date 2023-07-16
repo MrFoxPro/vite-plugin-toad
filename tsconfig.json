@@ -1,0 +1,23 @@
+{
+   "compilerOptions": {
+      "baseUrl": ".",
+      "declaration": true,
+      "emitDeclarationOnly": true,
+      "declarationDir": "./dist",
+      "sourceMap": false,
+      "target": "ESNext",
+      "module": "ESNext",
+      "forceConsistentCasingInFileNames": true,
+      "moduleResolution": "Bundler",
+      "allowSyntheticDefaultImports": false,
+      "resolvePackageJsonImports": true,
+      "resolvePackageJsonExports": true,
+      "skipDefaultLibCheck": true,
+      "experimentalDecorators": true,
+      "emitDecoratorMetadata": true,
+      "strictFunctionTypes": true,
+      "lib": ["DOM", "ESNext"]
+   },
+   "exclude": ["node_modules", "dist", "./examples"],
+   "include": ["src"]
+}

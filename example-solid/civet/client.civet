@@ -1,0 +1,6 @@
+import { App } from './entry.civet'
+
+import { hydrate } from 'solid-js/web'
+
+hydrate(App, document.body)
+console.log('hydrated')

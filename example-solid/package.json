@@ -1,0 +1,22 @@
+{
+   "name": "@vite-plugin-universal/example-solid",
+   "type": "module",
+   "scripts": {
+      "dev": "vite",
+      "build": "vite build",
+      "preview": "vite preview"
+   },
+   "devDependencies": {
+      "@mdx-js/rollup": "^2.3.0",
+      "@vite-plugin-universal/example-solid": "link:/home/foxpro/craft/vite-plugin-universal/example.solid",
+      "remark-frontmatter": "^4.0.1",
+      "remark-mdx-frontmatter": "^3.0.0",
+      "solid-js": "^1.7.8",
+      "solid-mdx": "^0.0.6",
+      "vite": "^4.4.4",
+      "vite-plugin-civet": "^0.2.6",
+      "vite-plugin-inspect": "^0.7.33",
+      "vite-plugin-solid": "^2.7.0",
+      "vite-plugin-universal": "^0.1.2"
+   }
+}

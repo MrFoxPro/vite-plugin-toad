@@ -1,0 +1,27 @@
+{
+   "version": "0.2.0",
+   "configurations": [
+      {
+         "name": "Debug Solid example (dev)",
+         "request": "launch",
+         "cwd": "${workspaceFolder}/example-solid",
+         "runtimeArgs": ["dev"],
+         "runtimeExecutable": "pnpm",
+         // "skipFiles": ["<node_internals>/**"],
+         "type": "node",
+         "console": "integratedTerminal",
+         "autoAttachChildProcesses": true
+      },
+      {
+         "name": "Debug Solid example (build)",
+         "request": "launch",
+         "cwd": "${workspaceFolder}/example-solid",
+         "runtimeArgs": ["build"],
+         "runtimeExecutable": "pnpm",
+         // "skipFiles": ["<node_internals>/**"],
+         "type": "node",
+         "console": "integratedTerminal",
+         "autoAttachChildProcesses": true
+      }
+   ]
+}

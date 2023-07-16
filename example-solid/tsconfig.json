@@ -1,0 +1,17 @@
+{
+   "compilerOptions": {
+      "baseUrl": "./",
+      "module": "esnext",
+      "target": "esnext",
+      "moduleResolution": "bundler",
+      "declaration": true,
+      "emitDeclarationOnly": true,
+      "allowImportingTsExtensions": true,
+      "resolvePackageJsonImports": true,
+      "resolvePackageJsonExports": true,
+      "jsxImportSource": "solid-js",
+      "jsx": "preserve",
+      "types": ["vite/client"]
+   },
+   "exclude": ["node_modules"]
+}

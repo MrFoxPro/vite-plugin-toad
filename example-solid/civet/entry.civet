@@ -1,0 +1,22 @@
+import { Component, createEffect, createSignal, onCleanup } from 'solid-js'
+import { renderToString, generateHydrationScript } from'solid-js/web'
+
+export const App: Component = () ->
+    const [counter, setCounter] = createSignal(0)
+    createEffect(() -> {
+        const interval = setInterval(() -> {
+            setCounter((counter) => counter + 1)
+        }, 1000)
+        onCleanup(() -> clearInterval(interval))
+    })
+    <h1>
+        Learn Civet {counter()}
+
+export default {
+    output() {
+        {
+            head: [generateHydrationScript()],
+            body: [renderToString(App)]
+        }
+    },
+}
