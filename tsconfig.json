@@ -19,5 +19,5 @@
       "lib": ["DOM", "ESNext"]
    },
    "exclude": ["node_modules", "dist", "./examples"],
-   "include": ["src"]
+   "include": ["src/index.ts"]
 }

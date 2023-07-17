@@ -5,8 +5,8 @@ import type { Plugin, ResolvedConfig, FilterPattern, ViteDevServer, ModuleNode, 
 import { createFilter, createServer, mergeConfig, normalizePath } from 'vite'
 import outdent from 'outdent'
 import { stringify } from 'javascript-stringify'
-import { Visitor } from '@swc/core/Visitor'
-import type * as swc from '@swc/core'
+// import { Visitor } from '@swc/core/Visitor'
+// import type * as swc from '@swc/core'
 
 export type VitePluginToadOptions = {
    include?: FilterPattern
@@ -15,10 +15,6 @@ export type VitePluginToadOptions = {
     * Tag to replace. Default is `css`
     */
    tag?: string
-   /**
-    * Tag to replace. Default is `.css`
-    */
-   outputExtension?: string
    /**
     * Tag to replace. Default is `.css`
     */
@@ -75,18 +71,18 @@ export default function (
    const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    // const jsxRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
 
-   class ToadVisitor extends Visitor {
-      visitModule(m: swc.Module): swc.Module {
-         return super.visitModule(m)
-      }
-      visitIdentifier(node) {
-         return node
-      }
+   // class ToadVisitor extends Visitor {
+   //    visitModule(m: swc.Module): swc.Module {
+   //       return super.visitModule(m)
+   //    }
+   //    visitIdentifier(node) {
+   //       return node
+   //    }
 
-      visitTsType(node) {
-         return node
-      }
-   }
+   //    visitTsType(node) {
+   //       return node
+   //    }
+   // }
 
    function getToadModuleId(modId: string) {
       return path.posix.join(
