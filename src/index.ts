@@ -1,7 +1,16 @@
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
 
-import type { Plugin, ResolvedConfig, FilterPattern, ViteDevServer, ModuleNode, Update } from 'vite'
+import type {
+   Plugin,
+   ResolvedConfig,
+   FilterPattern,
+   ViteDevServer,
+   ModuleNode,
+   Update,
+   UserConfig,
+   ConfigEnv,
+} from 'vite'
 import { createFilter, createServer, mergeConfig, normalizePath } from 'vite'
 import outdent from 'outdent'
 import { stringify } from 'javascript-stringify'
@@ -31,8 +40,14 @@ export default function (
    let config: ResolvedConfig
    let server: ViteDevServer
    let root: string
+   let env: ConfigEnv
 
    let lastServedTime = Date.now()
+
+   const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
+   const WS_EVENT_PREFIX = '@toad:hmr'
+   const TODAD_IDENTIFIER = '__TOAD__'
+   const SSR_QS = 'ssr-toad'
 
    const state: {
       [id: string]: {
@@ -44,7 +59,6 @@ export default function (
    } = {}
 
    const filter = createFilter(options.include, options.exclude)
-
    const rootAbs = (p: string) => path.resolve(root, p)
    const rootRel = (p: string) => path.relative(root, p)
    const comparePaths = (p1: string, p2: string) => {
@@ -58,15 +72,9 @@ export default function (
       if (path.isAbsolute(p)) p = rootRel(p)
       return '/' + normalizePath(p)
    }
-
    function createHash(data, len) {
       return crypto.createHash('shake256', { outputLength: len }).update(data).digest('hex')
    }
-
-   const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
-   const WS_EVENT_PREFIX = '@toad:hmr'
-   const TODAD_IDENTIFIER = '__TOAD__'
-   const SSR_QS = 'ssr-toad'
 
    const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    // const jsxRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
@@ -112,6 +120,9 @@ export default function (
    return {
       name: 'toad:main',
       enforce: 'pre',
+      config(_config, _env) {
+         env = _env
+      },
       configResolved(_config) {
          config = _config
          root = config.root

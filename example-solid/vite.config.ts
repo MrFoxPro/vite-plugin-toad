@@ -55,7 +55,7 @@ export default async ({ mode }: ConfigEnv) => {
             },
          }),
          ViteToad(),
-         // VitePluginInspect(),
+         VitePluginInspect(),
       ],
       css: {
          modules: false,
