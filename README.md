@@ -47,4 +47,5 @@ const App = () => {
 For more advanced documentation, read typescript JSDoc comments.
 
 Check out [example](example-solid)
+
 ⚠ Work in progress.
