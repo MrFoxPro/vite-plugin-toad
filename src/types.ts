@@ -1,2 +1,2 @@
 type CSS = (strings: TemplateStringsArray, ...exprs: Array<string | number>) => string
-export const css: CSS = () => void 0
+export const css: CSS = (strings: TemplateStringsArray, ...exprs: Array<string | number>) => strings[0]

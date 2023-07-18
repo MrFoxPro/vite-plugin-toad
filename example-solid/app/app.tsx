@@ -1,10 +1,10 @@
-/*@toad-ext .css*/
+/*@toad-ext .scss*/
 
 import { isServer, render } from 'solid-js/web'
 
-import { css } from '../../src/types.js'
+import { css } from '../../src/types.ts'
+import logo from './logo.svg'
 import Constants from './constants.ts'
-import logo from './app/logo.svg'
 
 css`
    /*global*/
@@ -37,7 +37,8 @@ const App = () => {
                   height: 40vmin;
                   pointer-events: none;
                   & ~ p {
-                     color: blue; // SCSS!
+                     $variable: blue;
+                     color: #{$variable}; // SCSS!
                   }
                `}
             />

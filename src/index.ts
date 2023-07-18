@@ -18,7 +18,7 @@ export type VitePluginToadOptions = {
     */
    outputExtension?: string
 
-   ssr: {
+   ssr?: {
       /**
        * Load module to evaluate emplate strings
        * @default false
@@ -121,6 +121,7 @@ export default function (options: VitePluginToadOptions): Plugin {
    // }
 
    function getToadModuleId(modId: string, ext = options.outputExtension) {
+      ext ??= options.outputExtension
       return path.posix.join(VIRTUAL_MODULE_PREFIX, modId.replace(path.extname(modId), ext))
    }
 
@@ -244,8 +245,8 @@ export default function (options: VitePluginToadOptions): Plugin {
          }
 
          let result: string = `
-            import "${vModId}"
-            ${processedCode}
+import "${vModId}"
+${processedCode}
          `
          if (!opts?.ssr && code.includes('import.meta.hot')) {
             const vMod = Object.values(state).find(entry => entry.ownerId === id)
@@ -285,6 +286,7 @@ export default function (options: VitePluginToadOptions): Plugin {
          const res = await server.ssrTransform(code, null, id)
          for (const dep of res.deps) {
             const resolved = await this.resolve(dep, id)
+            if (!resolved) continue
             const modInfo = this.getModuleInfo(resolved.id)
             if (modInfo && !modInfo.id.includes('node_modules')) {
                state[vModId].deps.push(modInfo.id)
@@ -312,29 +314,51 @@ export default function (options: VitePluginToadOptions): Plugin {
          const mods = ctx.modules.filter(mod => !mod.id.includes(QS_SSR))
          for (const mod of mods) {
             server.moduleGraph.invalidateModule(mod)
-            const [relatedId] = Object.entries(state).find(([id, { ownerId }]) => ownerId === mod.id)
-            const toadMod = server.moduleGraph.getModuleById(relatedId)
-            if (toadMod) {
-               server.moduleGraph.invalidateModule(toadMod)
-            }
+
+            // const related = Object.entries(state).find(([id, { ownerId }]) => ownerId === mod.id)
+            // if (!related) continue
+            // const toadMod = server.moduleGraph.getModuleById(related[0])
+            // if (toadMod) {
+            //    server.moduleGraph.invalidateModule(toadMod)
+            // }
          }
          return mods
       },
    }
 
-   const ssr: Plugin = {
+   const preSsr: Plugin = {
       name: 'toad:ssr',
+      enforce: 'pre',
+      transform: {
+         order: 'pre',
+         handler(code, url, opts) {
+            const [id, qs] = url.split('?')
+            if (!filter(id) || (!qs?.includes(QS_FULL_SKIP) && !qs?.includes(QS_SSR))) return
+
+            const [processedCode, entries, ext] = processModule(id, code)
+            const jsEntries = stringify(entries, (value, space, next, key) => {
+               if (typeof value === 'string') {
+                  return `\`${value}\``
+               }
+               return next(value)
+            })
+            return `
+               ${processedCode}
+               export const ${TODAD_IDENTIFIER} = ${jsEntries}
+            `
+         },
+      },
+   }
+   const ssr: Plugin = {
+      name: 'toad:ssr-middleware',
       enforce: 'pre',
       transform: {
          order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
             if (!filter(id)) return
-
             if (qs?.includes(QS_FULL_SKIP)) return
             if (!opts?.ssr || !qs?.includes(QS_SSR)) return
-
-            const vModId = getToadModuleId(id)
 
             let moduleCode = code
             if (options.ssr?.customSSRTransformer) {
@@ -347,17 +371,7 @@ export default function (options: VitePluginToadOptions): Plugin {
                   config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
                }
             }
-            const [processedCode, entries] = processModule(id, moduleCode)
-            const jsEntries = stringify(entries, (value, space, next, key) => {
-               if (typeof value === 'string') {
-                  return `\`${value}\``
-               }
-               return next(value)
-            })
-            return `
-               ${processedCode}
-               export const ${TODAD_IDENTIFIER} = ${jsEntries}
-            `
+            return moduleCode
          },
       },
    }
@@ -381,7 +395,7 @@ export default function (options: VitePluginToadOptions): Plugin {
    }
    const plugins = [main]
    if (options.transformStyle) plugins.push(styles)
-   if (options.ssr?.customSSRTransformer) plugins.push(ssr)
+   if (options.ssr?.customSSRTransformer) plugins.push(preSsr, ssr)
 
    return Object.assign(plugins, { name: 'toad' })
 }
