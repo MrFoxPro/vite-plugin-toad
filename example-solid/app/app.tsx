@@ -1,13 +1,15 @@
+/*@toad-ext .css*/
+
 import { isServer, render } from 'solid-js/web'
 
-import { css } from '../src/types.ts'
+import { css } from '../../src/types.js'
+import Constants from './constants.ts'
 import logo from './app/logo.svg'
-// import Constants from './app/constants.js'
 
 css`
    /*global*/
    body {
-      background-color: blue;
+      background-color: ${Constants.BACKGROUND_COLOR};
    }
    @keyframes logo-spin {
       from {
@@ -19,12 +21,14 @@ css`
    }
 `
 const App = () => {
-   const cl = css`
-      max-width: 800px;
-      background-color: #dadada;
-   `
    return (
-      <div class={cl}>
+      <div
+         class={css`
+            /*@toad-debug wrapper*/
+            max-width: 800px;
+            background-color: #dadada;
+         `}
+      >
          <header>
             <img
                src={logo}
@@ -32,13 +36,12 @@ const App = () => {
                   animation: logo-spin infinite 10s linear;
                   height: 40vmin;
                   pointer-events: none;
+                  & ~ p {
+                     color: blue; // SCSS!
+                  }
                `}
             />
-            <p
-               class={css`
-                  color: blue;
-               `}
-            >
+            <p>
                Edit <code>app.tsx</code> and save to reload.
             </p>
             <a href="https://github.com/solidjs/solid" target="_blank" rel="noopener noreferrer">

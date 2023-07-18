@@ -11,6 +11,7 @@
       "@vite-plugin-universal/example-solid": "link:/home/foxpro/craft/vite-plugin-universal/example.solid",
       "remark-frontmatter": "^4.0.1",
       "remark-mdx-frontmatter": "^3.0.0",
+      "sass": "^1.63.6",
       "solid-js": "^1.7.8",
       "solid-mdx": "^0.0.6",
       "vite": "^4.4.4",

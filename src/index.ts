@@ -3,6 +3,7 @@ import * as crypto from 'node:crypto'
 
 import type { Plugin, ResolvedConfig, FilterPattern, ViteDevServer, Update, ConfigEnv, Rollup } from 'vite'
 import { createFilter, createServer, normalizePath } from 'vite'
+import { outdent } from 'outdent'
 import { stringify } from 'javascript-stringify'
 
 // import { Visitor } from '@swc/core/Visitor'
@@ -11,11 +12,6 @@ import { stringify } from 'javascript-stringify'
 export type VitePluginToadOptions = {
    include?: FilterPattern
    exclude?: FilterPattern
-   /**
-    * Tag to replace.
-    * @default 'css'
-    */
-   tag?: string
    /**
     * Tag to replace.
     * @default 'css'
@@ -77,13 +73,14 @@ export default function (options: VitePluginToadOptions): Plugin {
    const TODAD_IDENTIFIER = '__TOAD__'
    const QS_SSR = 'toad-ssr'
    const QS_FULL_SKIP = 'toad-full-skip'
-   const STYLE_HASH_LEN = 8
+   const STYLE_HASH_LEN = 5
 
    type VirtualModuleData = {
       hash: string
       src: string
       ownerId: string
       deps: string[]
+      ext?: string
    }
    const state: {
       [id: string]: VirtualModuleData
@@ -107,7 +104,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       return crypto.createHash('shake256', { outputLength: len }).update(data).digest('hex')
    }
 
-   const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
+   const jsRegex = new RegExp(`(css)\\s*\`([\\s\\S]*?)\``, 'gm')
    // const jsxRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
 
    // class ToadVisitor extends Visitor {
@@ -123,11 +120,8 @@ export default function (options: VitePluginToadOptions): Plugin {
    //    }
    // }
 
-   function getToadModuleId(modId: string) {
-      return path.posix.join(
-         VIRTUAL_MODULE_PREFIX,
-         modId.replace(path.extname(modId), options.outputExtension)
-      )
+   function getToadModuleId(modId: string, ext = options.outputExtension) {
+      return path.posix.join(VIRTUAL_MODULE_PREFIX, modId.replace(path.extname(modId), ext))
    }
 
    function sendHmrUpdate(ids: string[]) {
@@ -160,23 +154,25 @@ export default function (options: VitePluginToadOptions): Plugin {
    function processModule(id: string, code: string) {
       const entries: StyleEntry[] = []
       const relId = rootRel(id)
-      const transformed = code.replaceAll(jsRegex, (substring, tag, src) => {
-         src = src.trim()
+      const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
+      const transformed = code.replaceAll(jsRegex, (substring, tag, _src) => {
+         const src = _src.trim() as string
 
          const filename = relId.replace(path.extname(relId), '')
          const isGlobal = src.startsWith('/*global*/')
+         const debugName = src.match(/\/\*@toad-debug[\s]+(?<debug>.+)\*\//)?.groups?.debug
 
-         let classId = filename
-         if (isGlobal) {
-            classId += '-global-'
-         }
-         classId += createHash(src, 5)
-         classId = toValidCSSIdentifier(classId)
+         const parts: string[] = [filename]
+
+         if (isGlobal) parts.push('global')
+         if (debugName) parts.push(debugName)
+
+         parts.push(createHash(src, 3))
+         const classId = toValidCSSIdentifier(parts.join('-'))
          entries.push({ classId, src, isGlobal })
-
          return isGlobal ? '' : `"${classId}"`
       })
-      return [transformed, entries] as const
+      return [transformed, entries, ext] as const
    }
    function createHMRScript(id: string, hash: string) {
       return `
@@ -236,10 +232,10 @@ export default function (options: VitePluginToadOptions): Plugin {
          const [id, qs] = url.split('?')
          if (!filter(id) || qs?.includes(QS_SSR)) return
 
-         const [processedCode, entries] = processModule(id, code)
+         const [processedCode, entries, ext] = processModule(id, code)
          if (entries.length == 0) return code
 
-         const vModId = getToadModuleId(id)
+         const vModId = getToadModuleId(id, ext)
 
          const vMod = server.moduleGraph.getModuleById(vModId)
          if (vMod) {
@@ -265,11 +261,14 @@ export default function (options: VitePluginToadOptions): Plugin {
 
          async function createStyle(vModId: string, entries: StyleEntry[]) {
             for (const { classId, src, isGlobal } of entries) {
+               state[vModId].src += '\n'
                if (isGlobal) {
-                  state[vModId].src += `${src}\n`
+                  state[vModId].src += `\n${src}\n`
                   continue
                }
-               state[vModId].src += `.${classId} {${src}}\n`
+               state[vModId].src += `.${classId} {
+                  ${src}
+               }\n`
             }
             state[vModId].hash = createHash(state[vModId].src, STYLE_HASH_LEN)
          }
@@ -310,13 +309,11 @@ export default function (options: VitePluginToadOptions): Plugin {
       // fuck Vite tbh
       // undocumented + dead discord community
       handleHotUpdate(ctx) {
-         // it's module, so just transform it
          const mods = ctx.modules.filter(mod => !mod.id.includes(QS_SSR))
-         // if (!ctx.modules.length) return ctx.modules
-         // cond
          for (const mod of mods) {
             server.moduleGraph.invalidateModule(mod)
-            const toadMod = server.moduleGraph.getModuleById(getToadModuleId(mod.id))
+            const [relatedId] = Object.entries(state).find(([id, { ownerId }]) => ownerId === mod.id)
+            const toadMod = server.moduleGraph.getModuleById(relatedId)
             if (toadMod) {
                server.moduleGraph.invalidateModule(toadMod)
             }
@@ -328,7 +325,6 @@ export default function (options: VitePluginToadOptions): Plugin {
    const ssr: Plugin = {
       name: 'toad:ssr',
       enforce: 'pre',
-
       transform: {
          order: 'pre',
          async handler(code, url, opts) {
@@ -338,26 +334,12 @@ export default function (options: VitePluginToadOptions): Plugin {
             if (qs?.includes(QS_FULL_SKIP)) return
             if (!opts?.ssr || !qs?.includes(QS_SSR)) return
 
-            const [processedCode, entries] = processModule(id, code)
-
             const vModId = getToadModuleId(id)
-            const jsEntries = stringify(entries, (value, space, next, key) => {
-               if (typeof value === 'string') {
-                  return `\`${value}\``
-               }
-               return next(value)
-            })
-            let moduleCode = processedCode
+
+            let moduleCode = code
             if (options.ssr?.customSSRTransformer) {
                try {
-                  const result = await options.ssr?.customSSRTransformer(
-                     processedCode,
-                     this,
-                     server,
-                     code,
-                     url,
-                     opts
-                  )
+                  const result = await options.ssr?.customSSRTransformer(code, this, server, code, url, opts)
                   if (result) {
                      moduleCode = typeof result == 'string' ? result : result.code
                   } else config.logger.warn('[toad] customSSRTransformer did not return a value')
@@ -365,8 +347,15 @@ export default function (options: VitePluginToadOptions): Plugin {
                   config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
                }
             }
+            const [processedCode, entries] = processModule(id, moduleCode)
+            const jsEntries = stringify(entries, (value, space, next, key) => {
+               if (typeof value === 'string') {
+                  return `\`${value}\``
+               }
+               return next(value)
+            })
             return `
-               ${moduleCode}
+               ${processedCode}
                export const ${TODAD_IDENTIFIER} = ${jsEntries}
             `
          },
