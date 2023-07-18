@@ -28,6 +28,7 @@ export type VitePluginToadOptions = {
     * Tag to replace. Default is `.css`
     */
    outputExtension?: string
+   eval?: boolean
 }
 export default function (
    options: VitePluginToadOptions = {
@@ -130,6 +131,7 @@ export default function (
       configureServer(_server) {
          server = _server
          server.ws.on(WS_EVENT_PREFIX, ([id, hash]: string[]) => {
+            console.log('sending hmr update')
             if (state[id]?.hash != hash) sendHmrUpdate(Object.keys(state))
          })
       },
@@ -210,8 +212,8 @@ export default function (
             `
             }
          }
-
          const vModId = getToadModuleId(id)
+
          if (qs?.includes(SSR_QS)) {
             const exportsCode =
                `export const ${TODAD_IDENTIFIER} = ` +
@@ -233,9 +235,12 @@ export default function (
             ownerId: id,
             dependencies: [],
          }
-         const res = await server.ssrTransform(code, null, id)
-         const mod = await server.ssrLoadModule(id + '?' + SSR_QS)
-         for (const { classId, src, isGlobal } of mod[TODAD_IDENTIFIER].entries as Entry[]) {
+         let items = data.entries
+         if (options.eval) {
+            const mod = await server.ssrLoadModule(id)
+            items = mod[TODAD_IDENTIFIER].entries as Entry[]
+         }
+         for (const { classId, src, isGlobal } of items) {
             if (isGlobal) {
                state[vModId].src += `${src}\n`
                continue
@@ -243,16 +248,24 @@ export default function (
             state[vModId].src += `.${classId} {${src}}\n`
          }
          state[vModId].hash = createHash(state[vModId].src, 8)
+         if (!options.eval) {
+            return outdent`
+               import "${vModId}"
+               ${transformed}
+               ${outro}
+            `
+         }
+         const res = await server.ssrTransform(code, null, id)
          for (const dep of res.deps) {
             const resolved = await this.resolve(dep, id)
             const modInfo = this.getModuleInfo(resolved.id)
             if (modInfo && !modInfo.id.includes('node_modules')) state[vModId].dependencies.push(modInfo.id)
          }
-         const vMod = server.moduleGraph.getModuleById(vModId)
-         if (vMod) {
-            server.moduleGraph.invalidateModule(vMod)
-            vMod.lastHMRTimestamp = vMod.lastInvalidationTimestamp || Date.now()
-         }
+         // const vMod = server.moduleGraph.getModuleById(vModId)
+         // if (vMod) {
+         //    server.moduleGraph.invalidateModule(vMod)
+         //    vMod.lastHMRTimestamp = vMod.lastInvalidationTimestamp || Date.now()
+         // }
          return outdent`
                import "${vModId}"
                ${transformed}
@@ -268,7 +281,6 @@ export default function (
          // const reverted = await swc.print(result, {
          //    plugin: m => visitor.visitProgram(m),
          // })
-         // return `import "${virtualId}-2.css"\n${reverted.code}`
       },
       buildEnd() {
          return server.close()
@@ -276,35 +288,33 @@ export default function (
       // Idk but it works fine without this bullshit
       // fuck Vite tbh
       // undocumented + dead discord community
-      // handleHotUpdate(ctx) {
-      // it's module, so just transform it
-      // const mods = ctx.modules.filter(mod => !mod.id.includes(SSR_QS))
-      // if (!mods.length) return []
+      handleHotUpdate(ctx) {
+         // it's module, so just transform it
+         const mods = ctx.modules.filter(mod => !mod.id.includes(SSR_QS))
+         // if (!ctx.modules.length) return ctx.modules
+         // cond
+         for (const mod of mods) {
+            const toadMod = server.moduleGraph.getModuleById(getToadModuleId(mod.id))
+            server.moduleGraph.invalidateModule(toadMod)
+            server.moduleGraph.invalidateModule(mod)
+         }
+         return mods
 
-      // for (const mod of mods) {
-      //    const vMod = getToadModuleId(mod.id)
-      //    const virtualMod = state[vMod]
-      //    if (!virtualMod) continue
-      //    const toadMod = server.moduleGraph.getModuleById(vMod)
-      //    server.moduleGraph.invalidateModule(toadMod)
-      // }
-      // return []
-
-      // // Select affected modules of changed dependency
-      // const affected = Object.entries(state).filter(
-      //    ([id, x]) =>
-      //       // file is dependency of any target
-      //       x.dependencies.some(dep => dep === ctx.file) ||
-      //       // or changed module is a dependency of any target
-      //       x.dependencies.some(dep => ctx.modules.some(m => m.file === dep))
-      // )
-      // const modules = affected
-      //    .map(([id]) => server.moduleGraph.getModuleById(id))
-      //    .concat(ctx.modules)
-      //    .filter((m): m is ModuleNode => !!m)
-      // // modules.forEach(m => server.moduleGraph.invalidateModule(m))
-      // return modules
-      // return []
-      // },
+         // // Select affected modules of changed dependency
+         // const affected = Object.entries(state).filter(
+         //    ([id, x]) =>
+         //       // file is dependency of any target
+         //       x.dependencies.some(dep => dep === ctx.file) ||
+         //       // or changed module is a dependency of any target
+         //       x.dependencies.some(dep => ctx.modules.some(m => m.file === dep))
+         // )
+         // const modules = affected
+         //    .map(([id]) => server.moduleGraph.getModuleById(id))
+         //    .concat(ctx.modules)
+         //    .filter((m): m is ModuleNode => !!m)
+         // // modules.forEach(m => server.moduleGraph.invalidateModule(m))
+         // return modules
+         // return []
+      },
    }
 }

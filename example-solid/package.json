@@ -17,6 +17,6 @@
       "vite-plugin-civet": "^0.2.6",
       "vite-plugin-inspect": "^0.7.33",
       "vite-plugin-solid": "^2.7.0",
-      "vite-plugin-universal": "^0.1.2"
+      "vite-plugin-universal": "^0.1.8"
    }
 }

@@ -37,19 +37,19 @@
    "devDependencies": {
       "@babel/preset-typescript": "^7.22.5",
       "@rollup/plugin-babel": "^6.0.3",
-      "@swc/core": "^1.3.69",
-      "@typescript-eslint/eslint-plugin": "^6.0.0",
-      "@typescript-eslint/parser": "^6.0.0",
+      "@swc/core": "^1.3.70",
+      "@typescript-eslint/eslint-plugin": "^6.1.0",
+      "@typescript-eslint/parser": "^6.1.0",
       "eslint": "^8.45.0",
       "eslint-config-prettier": "^8.8.0",
       "eslint-plugin-import": "^2.27.5",
       "eslint-plugin-prettier": "^5.0.0",
-      "rollup": "^3.26.2",
+      "rollup": "^3.26.3",
       "rollup-plugin-delete": "^2.0.0",
       "typescript": "^5.1.6"
    },
    "dependencies": {
-      "outdent": "^0.8.0",
-      "javascript-stringify": "^2.1.0"
+      "javascript-stringify": "^2.1.0",
+      "outdent": "^0.8.0"
    }
 }

@@ -26,32 +26,11 @@ export default async ({ mode }: ConfigEnv) => {
          port: 3000,
       },
       plugins: [
-         {
-            ...RollupMdx({
-               jsx: true,
-               jsxImportSource: 'solid-js',
-               providerImportSource: 'solid-mdx',
-               development: dev,
-               remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
-            }),
-            enforce: 'pre',
-         },
          ViteSolid({
             hot: dev,
             dev: dev,
-            extensions: ['.ts', '.tsx'],
-         }),
-         ViteUniversal<{ head: string[]; body: string[] }>({
-            entries: [
-               {
-                  templatePath: 'app/app.html',
-                  urlAlias: '/',
-                  outputPath: 'index.html',
-                  isFallback: true,
-               },
-            ],
-            applyOutput({ head, body }, template) {
-               return template.replace('<!--head-->', head.join('\n')).replace('<!--body-->', body.join('\n'))
+            solid: {
+               generate: 'dom',
             },
          }),
          ViteToad(),
