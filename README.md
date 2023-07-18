@@ -2,6 +2,8 @@ Zero-runtime CSS-in-JS tool.
 
 HMR supported.
 
+`pnpm i -D vite-plugin-toad`
+
 ```tsx
 /*@toad-ext .scss*/ // This sets extension for corresponding output extension.
 // You can set in plugin config globally or for each file.
