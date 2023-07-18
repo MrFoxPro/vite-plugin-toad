@@ -1,11 +1,10 @@
 import * as path from 'node:path'
-import * as crypto from 'node:crypto'
 
 import type { Plugin, ResolvedConfig, FilterPattern, ViteDevServer, Update, ConfigEnv, Rollup } from 'vite'
 import { createFilter, createServer, normalizePath } from 'vite'
-import { outdent } from 'outdent'
 import { stringify } from 'javascript-stringify'
 
+import { slugify } from './slugify.ts'
 // import { Visitor } from '@swc/core/Visitor'
 // import type * as swc from '@swc/core'
 
@@ -101,7 +100,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       return '/' + normalizePath(p)
    }
    function createHash(data, len) {
-      return crypto.createHash('shake256', { outputLength: len }).update(data).digest('hex')
+      return slugify(data).slice(len)
    }
 
    const jsRegex = new RegExp(`(css)\\s*\`([\\s\\S]*?)\``, 'gm')

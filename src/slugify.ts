@@ -1,14 +1,6 @@
-/* eslint-disable no-plusplus */
-/**
- * This file contains a utility to generate hashes to be used as generated class names
- */
-
-/* eslint-disable no-bitwise, default-case, no-param-reassign, prefer-destructuring */
-
 /**
  * murmurhash2 via https://gist.github.com/raycmorgan/588423
- */
-
+*/
 function UInt32(str: string, pos: number) {
    return (
       str.charCodeAt(pos++) +
