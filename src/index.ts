@@ -131,7 +131,6 @@ export default function (
       configureServer(_server) {
          server = _server
          server.ws.on(WS_EVENT_PREFIX, ([id, hash]: string[]) => {
-            console.log('sending hmr update')
             if (state[id]?.hash != hash) sendHmrUpdate(Object.keys(state))
          })
       },
@@ -188,6 +187,7 @@ export default function (
             classId = classId.replaceAll('/', '-')
             if (isGlobal) classId += '-global-'
             classId += createHash(src, 5)
+            classId = classId.replaceAll('.', '-')
             data.entries.push({
                classId,
                src,
