@@ -1,4 +1,4 @@
-import { render } from 'solid-js/web'
+import { isServer, render } from 'solid-js/web'
 
 import { css } from '../src/types.ts'
 import logo from './app/logo.svg'
@@ -7,7 +7,7 @@ import logo from './app/logo.svg'
 css`
    /*global*/
    body {
-      background-color: red;
+      background-color: blue;
    }
    @keyframes logo-spin {
       from {
@@ -20,13 +20,20 @@ css`
 `
 const App = () => {
    const cl = css`
-      color: white;
-      background-color: green;
+      max-width: 800px;
+      background-color: #dadada;
    `
    return (
       <div class={cl}>
          <header>
-            <img src={logo} />
+            <img
+               src={logo}
+               class={css`
+                  animation: logo-spin infinite 20s linear;
+                  height: 40vmin;
+                  pointer-events: none;
+               `}
+            />
             <p
                class={css`
                   color: green;
@@ -41,5 +48,6 @@ const App = () => {
       </div>
    )
 }
-
-render(App, document.body)
+if (!isServer) {
+   render(App, document.body)
+}

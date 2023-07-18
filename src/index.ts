@@ -1,18 +1,8 @@
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
 
-import type {
-   Plugin,
-   ResolvedConfig,
-   FilterPattern,
-   ViteDevServer,
-   ModuleNode,
-   Update,
-   UserConfig,
-   ConfigEnv,
-} from 'vite'
-import { createFilter, createServer, mergeConfig, normalizePath } from 'vite'
-import outdent from 'outdent'
+import type { Plugin, ResolvedConfig, FilterPattern, ViteDevServer, Update, ConfigEnv, Rollup } from 'vite'
+import { createFilter, createServer, normalizePath } from 'vite'
 import { stringify } from 'javascript-stringify'
 // import { Visitor } from '@swc/core/Visitor'
 // import type * as swc from '@swc/core'
@@ -21,23 +11,59 @@ export type VitePluginToadOptions = {
    include?: FilterPattern
    exclude?: FilterPattern
    /**
-    * Tag to replace. Default is `css`
+    * Tag to replace.
+    * @default 'css'
     */
    tag?: string
    /**
-    * Tag to replace. Default is `.css`
+    * Tag to replace.
+    * @default 'css'
     */
    outputExtension?: string
-   eval?: boolean
-}
-export default function (
-   options: VitePluginToadOptions = {
-      include: [/\.(t|j)sx?/],
-      exclude: [/node_modules/],
-      tag: 'css',
-      outputExtension: '.css',
+
+   ssr: {
+      /**
+       * Load module to evaluate emplate strings
+       * @default false
+       */
+      eval?: boolean
+      /**
+       * Some plugins don't respect vite `ssr: true` parameter, and they need to be processed separately
+       *
+       * You can process them in this callback. Make sure to output SSR-ready code
+       *
+       * See also: https://github.com/solidjs/vite-plugin-solid/pull/105
+       */
+      customSSRTransformer?(
+         processedCode: string,
+         ctx: Rollup.PluginContext,
+         server: ViteDevServer,
+         // IDK how to infer this cringy Vite type
+         ...viteOptions: [
+            originalCode: string,
+            id: string,
+            options?: {
+               ssr?: boolean
+            },
+         ]
+      ): Rollup.TransformResult | Promise<Rollup.TransformResult>
    }
-): Plugin {
+   /**
+    * Transform or process style of each module
+    */
+   transformStyle?(server: ViteDevServer, collectedSource: string): string | Promise<string>
+}
+export default function (options: VitePluginToadOptions): Plugin {
+   options = Object.assign(
+      {
+         include: [/\.(t|j)sx?/],
+         exclude: [/node_modules/],
+         tag: 'css',
+         outputExtension: '.css',
+         eval: false,
+      },
+      options
+   )
    let config: ResolvedConfig
    let server: ViteDevServer
    let root: string
@@ -48,15 +74,17 @@ export default function (
    const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
    const WS_EVENT_PREFIX = '@toad:hmr'
    const TODAD_IDENTIFIER = '__TOAD__'
-   const SSR_QS = 'ssr-toad'
+   const QS_SSR = 'ssr-toad'
+   const STYLE_HASH_LEN = 8
 
+   type VirtualModuleData = {
+      hash: string
+      src: string
+      ownerId: string
+      deps: string[]
+   }
    const state: {
-      [id: string]: {
-         hash: string
-         src: string
-         ownerId: string
-         dependencies: string[]
-      }
+      [id: string]: VirtualModuleData
    } = {}
 
    const filter = createFilter(options.include, options.exclude)
@@ -118,7 +146,47 @@ export default function (
       })
    }
 
-   return {
+   function toValidCSSIdentifier(s: string) {
+      return s.replace(/[^-_a-z0-9\u00A0-\uFFFF]/gi, '_').replace(/^\d/, '_')
+   }
+
+   type StyleEntry = {
+      classId: string
+      src: string
+      isGlobal: boolean
+   }
+   function processModule(id: string, code: string) {
+      const entries: StyleEntry[] = []
+      const relId = rootRel(id)
+      const transformed = code.replaceAll(jsRegex, (substring, tag, src) => {
+         src = src.trim()
+
+         const filename = relId.replace(path.extname(relId), '')
+         const isGlobal = src.startsWith('/*global*/')
+
+         let classId = filename
+         if (isGlobal) {
+            classId += '-global-'
+         }
+         classId += createHash(src, 5)
+         classId = toValidCSSIdentifier(classId)
+         entries.push({ classId, src, isGlobal })
+
+         return isGlobal ? '' : `"${classId}"`
+      })
+      return [transformed, entries] as const
+   }
+   function createHMRScript(id: string, hash: string) {
+      return `
+         if (import.meta.hot) {
+            try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${id}", "${hash}"]); }
+            catch (e) { console.warn('${WS_EVENT_PREFIX}', e) }
+            if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 100))
+         }
+      `
+   }
+
+   const main: Plugin = {
       name: 'toad:main',
       enforce: 'pre',
       config(_config, _env) {
@@ -131,7 +199,7 @@ export default function (
       configureServer(_server) {
          server = _server
          server.ws.on(WS_EVENT_PREFIX, ([id, hash]: string[]) => {
-            if (state[id]?.hash != hash) sendHmrUpdate(Object.keys(state))
+            if (state[id]?.hash !== hash) sendHmrUpdate(Object.keys(state))
          })
       },
       resolveId(id) {
@@ -144,8 +212,7 @@ export default function (
          if (!id.startsWith(VIRTUAL_MODULE_PREFIX)) return
          const source = state[id]
          if (!source) {
-            if (qs?.includes(SSR_QS)) return ''
-
+            if (qs?.includes(QS_SSR)) return ''
             config.logger.error(`[toad] Failed to resolve ${url}`)
             return
          }
@@ -159,118 +226,66 @@ export default function (
             server: {
                middlewareMode: true,
             },
-            appType: 'custom',
          })
-         return
       },
       async transform(code, url, opts) {
          const [id, qs] = url.split('?')
          if (!filter(id)) return null
 
-         type Entry = {
-            classId: string
-            src: string
-            isGlobal: boolean
-         }
-         const data = {
-            entries: [] as Entry[],
-         }
+         const [processedCode, entries] = processModule(id, code)
+         if (entries.length == 0) return code
 
-         const relId = rootRel(id)
-         const transformed = code.replaceAll(jsRegex, (substring, ...args) => {
-            const tag: string = args[0]
-            const src: string = args[1].trim()
-
-            const isGlobal = src.startsWith('/*global*/')
-
-            let classId = relId.replace(path.extname(relId), '')
-            classId = classId.replaceAll('/', '-')
-            if (isGlobal) classId += '-global-'
-            classId += createHash(src, 5)
-            classId = classId.replaceAll('.', '-')
-            data.entries.push({
-               classId,
-               src,
-               isGlobal,
-            })
-            if (isGlobal) return ''
-            return '"' + classId + '"'
-         })
-
-         if (data.entries.length == 0) return code
-
-         let outro = ''
-         if (!opts?.ssr && code.includes('import.meta.hot')) {
-            const vMod = Object.entries(state).find(([_vId, data]) => data.ownerId === id)
-            if (vMod) {
-               outro += `
-               if (import.meta.hot) {
-                  try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${id}", "${vMod[1].hash}"]); }
-                  catch (e) { console.warn('${WS_EVENT_PREFIX}', e) }
-                  if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 100))
-               }
-            `
-            }
-         }
          const vModId = getToadModuleId(id)
 
-         if (qs?.includes(SSR_QS)) {
-            const exportsCode =
-               `export const ${TODAD_IDENTIFIER} = ` +
-               stringify(data, (value, space, next, key) => {
-                  if (typeof value === 'string') {
-                     return `\`${value}\``
-                  }
-                  return next(value)
-               })
-            return outdent`
-                  import "${vModId}?${SSR_QS}"
-                  ${transformed}
-                  ${exportsCode}
-               `
+         const vMod = server.moduleGraph.getModuleById(vModId)
+         if (vMod) {
+            server.moduleGraph.invalidateModule(vMod)
+            vMod.lastHMRTimestamp = vMod.lastInvalidationTimestamp || Date.now()
          }
+
+         let result: string = `
+            import "${vModId}"
+            ${processedCode}
+         `
+         if (!opts?.ssr && code.includes('import.meta.hot')) {
+            const vMod = Object.values(state).find(entry => entry.ownerId === id)
+            if (vMod) result += createHMRScript(id, vMod.hash)
+         }
+
          state[vModId] = {
             src: '',
             hash: null,
             ownerId: id,
-            dependencies: [],
+            deps: [],
          }
-         let items = data.entries
-         if (options.eval) {
-            const mod = await server.ssrLoadModule(id)
-            items = mod[TODAD_IDENTIFIER].entries as Entry[]
-         }
-         for (const { classId, src, isGlobal } of items) {
-            if (isGlobal) {
-               state[vModId].src += `${src}\n`
-               continue
+
+         async function createStyle(vModId: string, entries: StyleEntry[]) {
+            for (const { classId, src, isGlobal } of entries) {
+               if (isGlobal) {
+                  state[vModId].src += `${src}\n`
+                  continue
+               }
+               state[vModId].src += `.${classId} {${src}}\n`
             }
-            state[vModId].src += `.${classId} {${src}}\n`
+            state[vModId].hash = createHash(state[vModId].src, STYLE_HASH_LEN)
          }
-         state[vModId].hash = createHash(state[vModId].src, 8)
-         if (!options.eval) {
-            return outdent`
-               import "${vModId}"
-               ${transformed}
-               ${outro}
-            `
+
+         if (!options.ssr?.eval) {
+            await createStyle(vModId, entries)
+            return result
          }
+
+         const mod = await server.ssrLoadModule(id + '?' + QS_SSR)
+         const evaluatedEntries = mod[TODAD_IDENTIFIER] as StyleEntry[]
+         await createStyle(vModId, evaluatedEntries)
+
          const res = await server.ssrTransform(code, null, id)
          for (const dep of res.deps) {
             const resolved = await this.resolve(dep, id)
             const modInfo = this.getModuleInfo(resolved.id)
-            if (modInfo && !modInfo.id.includes('node_modules')) state[vModId].dependencies.push(modInfo.id)
+            if (modInfo && !modInfo.id.includes('node_modules')) state[vModId].deps.push(modInfo.id)
          }
-         // const vMod = server.moduleGraph.getModuleById(vModId)
-         // if (vMod) {
-         //    server.moduleGraph.invalidateModule(vMod)
-         //    vMod.lastHMRTimestamp = vMod.lastInvalidationTimestamp || Date.now()
-         // }
-         return outdent`
-               import "${vModId}"
-               ${transformed}
-               ${outro}
-            `
+         return result
          // return null
          // const result = await swc.parse(code, {
          //    syntax: 'typescript',
@@ -290,31 +305,80 @@ export default function (
       // undocumented + dead discord community
       handleHotUpdate(ctx) {
          // it's module, so just transform it
-         const mods = ctx.modules.filter(mod => !mod.id.includes(SSR_QS))
+         const mods = ctx.modules.filter(mod => !mod.id.includes(QS_SSR))
          // if (!ctx.modules.length) return ctx.modules
          // cond
          for (const mod of mods) {
-            const toadMod = server.moduleGraph.getModuleById(getToadModuleId(mod.id))
-            server.moduleGraph.invalidateModule(toadMod)
             server.moduleGraph.invalidateModule(mod)
+            const toadMod = server.moduleGraph.getModuleById(getToadModuleId(mod.id))
+            if (toadMod) {
+               server.moduleGraph.invalidateModule(toadMod)
+            }
          }
          return mods
-
-         // // Select affected modules of changed dependency
-         // const affected = Object.entries(state).filter(
-         //    ([id, x]) =>
-         //       // file is dependency of any target
-         //       x.dependencies.some(dep => dep === ctx.file) ||
-         //       // or changed module is a dependency of any target
-         //       x.dependencies.some(dep => ctx.modules.some(m => m.file === dep))
-         // )
-         // const modules = affected
-         //    .map(([id]) => server.moduleGraph.getModuleById(id))
-         //    .concat(ctx.modules)
-         //    .filter((m): m is ModuleNode => !!m)
-         // // modules.forEach(m => server.moduleGraph.invalidateModule(m))
-         // return modules
-         // return []
       },
    }
+
+   const ssr: Plugin = {
+      name: 'toad:ssr',
+      async transform(code, url, opts) {
+         const [id, qs] = url.split('?')
+         if (!qs?.includes(QS_SSR)) return
+
+         const [processedCode, entries] = processModule(id, code)
+
+         const vModId = getToadModuleId(id)
+         const jsEntries = stringify(entries, (value, space, next, key) => {
+            if (typeof value === 'string') {
+               return `\`${value}\``
+            }
+            return next(value)
+         })
+         let moduleCode = processedCode
+         if (options.ssr?.customSSRTransformer) {
+            try {
+               const result = await options.ssr?.customSSRTransformer(
+                  processedCode,
+                  this,
+                  server,
+                  code,
+                  url,
+                  opts
+               )
+               if (result) {
+                  moduleCode = typeof result == 'string' ? result : result.code
+               } else config.logger.warn('[toad] customSSRTransformer did not return a value')
+            } catch (e) {
+               config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
+            }
+         }
+         return `
+               import "${vModId}?${QS_SSR}"
+               ${moduleCode}
+               export const ${TODAD_IDENTIFIER} = ${jsEntries}
+            `
+      },
+   }
+
+   const styles: Plugin = {
+      name: 'toad:styles',
+      async transform(code, url, opts) {
+         const [id, qs] = url.split('?')
+         if (!id.startsWith(VIRTUAL_MODULE_PREFIX)) return
+         const mod = state[id]
+         if (!mod) {
+            config.logger.warn(`[toad:styles]: Unable to find cached module ${id}`)
+            return
+         }
+         const result = await options.transformStyle!(server, mod.src)
+         mod.src = result
+         mod.hash = createHash(mod.src, STYLE_HASH_LEN)
+         return mod.src
+      },
+   }
+   const plugins = [main]
+   if (options.transformStyle) plugins.push(styles)
+   if (options.ssr?.customSSRTransformer) plugins.push(ssr)
+
+   return Object.assign(plugins, { name: 'toad' })
 }

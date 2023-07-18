@@ -1,20 +1,22 @@
 import path from 'node:path'
 
-import ViteUniversal from 'vite-plugin-universal'
-
-import ViteSolid from '/home/foxpro/sources/vite-plugin-solid/src/index.ts'
-
+import type { Options as SolidOptions } from 'vite-plugin-solid'
+import ViteSolid from 'vite-plugin-solid'
 import VitePluginInspect from 'vite-plugin-inspect'
-import VitePluginCivet from 'vite-plugin-civet'
 import type { ConfigEnv, UserConfig } from 'vite'
-import remarkMdxFrontmatter from 'remark-mdx-frontmatter'
-import remarkFrontmatter from 'remark-frontmatter'
-import RollupMdx from '@mdx-js/rollup'
 
 import ViteToad from '../src/index'
 
 export default async ({ mode }: ConfigEnv) => {
    const dev = mode === 'development'
+
+   const solidOptions: Partial<SolidOptions> = {
+      hot: dev,
+      dev: dev,
+      solid: {
+         generate: 'dom',
+      },
+   }
 
    const config: UserConfig = {
       base: '/',
@@ -26,14 +28,19 @@ export default async ({ mode }: ConfigEnv) => {
          port: 3000,
       },
       plugins: [
-         ViteSolid({
-            hot: dev,
-            dev: dev,
-            solid: {
-               generate: 'dom',
+         ViteSolid(),
+         ViteToad({
+            ssr: {
+               eval: true,
+               async customSSRTransformer(code, ctx, server, ...viteOptions) {
+                  solidOptions.solid.generate = 'ssr'
+                  solidOptions.solid.hydratable = false
+                  const result = await server.transformRequest(viteOptions[1], { ssr: true })
+                  solidOptions.solid.generate = 'dom'
+                  return result
+               },
             },
          }),
-         ViteToad(),
          VitePluginInspect(),
       ],
       css: {
