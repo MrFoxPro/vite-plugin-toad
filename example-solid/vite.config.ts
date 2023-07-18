@@ -5,7 +5,7 @@ import ViteSolid from 'vite-plugin-solid'
 import VitePluginInspect from 'vite-plugin-inspect'
 import type { ConfigEnv, UserConfig } from 'vite'
 
-import ViteToad from '../src/index'
+import ViteToad, { skipToadForUrl } from '../src/index'
 
 export default async ({ mode }: ConfigEnv) => {
    const dev = mode === 'development'
@@ -28,20 +28,23 @@ export default async ({ mode }: ConfigEnv) => {
          port: 3000,
       },
       plugins: [
-         ViteSolid(),
+         ViteSolid(solidOptions),
          ViteToad({
             ssr: {
                eval: true,
-               async customSSRTransformer(code, ctx, server, ...viteOptions) {
+               async customSSRTransformer(code, ctx, server, _c, url) {
                   solidOptions.solid.generate = 'ssr'
                   solidOptions.solid.hydratable = false
-                  const result = await server.transformRequest(viteOptions[1], { ssr: true })
+                  solidOptions.ssr = true
+                  const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
                   solidOptions.solid.generate = 'dom'
                   return result
                },
             },
          }),
-         VitePluginInspect(),
+         VitePluginInspect({
+            silent: true,
+         }),
       ],
       css: {
          modules: false,

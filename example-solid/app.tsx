@@ -29,20 +29,20 @@ const App = () => {
             <img
                src={logo}
                class={css`
-                  animation: logo-spin infinite 20s linear;
+                  animation: logo-spin infinite 10s linear;
                   height: 40vmin;
                   pointer-events: none;
                `}
             />
             <p
                class={css`
-                  color: green;
+                  color: blue;
                `}
             >
-               Edit <code>src/Appasadsfasgsfgasdasfasdfddfgsad.tsx</code> and save to reload.
+               Edit <code>app.tsx</code> and save to reload.
             </p>
             <a href="https://github.com/solidjs/solid" target="_blank" rel="noopener noreferrer">
-               Learn sfdasdfasasdfdsgfasdsaasfdsfsafgadsfsdf
+               Learn solid
             </a>
          </header>
       </div>

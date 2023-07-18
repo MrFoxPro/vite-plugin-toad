@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto'
 import type { Plugin, ResolvedConfig, FilterPattern, ViteDevServer, Update, ConfigEnv, Rollup } from 'vite'
 import { createFilter, createServer, normalizePath } from 'vite'
 import { stringify } from 'javascript-stringify'
+
 // import { Visitor } from '@swc/core/Visitor'
 // import type * as swc from '@swc/core'
 
@@ -74,7 +75,8 @@ export default function (options: VitePluginToadOptions): Plugin {
    const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
    const WS_EVENT_PREFIX = '@toad:hmr'
    const TODAD_IDENTIFIER = '__TOAD__'
-   const QS_SSR = 'ssr-toad'
+   const QS_SSR = 'toad-ssr'
+   const QS_FULL_SKIP = 'toad-full-skip'
    const STYLE_HASH_LEN = 8
 
    type VirtualModuleData = {
@@ -209,6 +211,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       },
       load(url) {
          const [id, qs] = url.split('?')
+         if (qs?.includes(QS_FULL_SKIP)) return
          if (!id.startsWith(VIRTUAL_MODULE_PREFIX)) return
          const source = state[id]
          if (!source) {
@@ -223,6 +226,7 @@ export default function (options: VitePluginToadOptions): Plugin {
          if (server) return
          server = await createServer({
             // @ts-ignore Ensure we will not listen server
+            mode: 'production',
             server: {
                middlewareMode: true,
             },
@@ -230,7 +234,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       },
       async transform(code, url, opts) {
          const [id, qs] = url.split('?')
-         if (!filter(id)) return null
+         if (!filter(id) || qs?.includes(QS_SSR)) return
 
          const [processedCode, entries] = processModule(id, code)
          if (entries.length == 0) return code
@@ -275,7 +279,7 @@ export default function (options: VitePluginToadOptions): Plugin {
             return result
          }
 
-         const mod = await server.ssrLoadModule(id + '?' + QS_SSR)
+         const mod = await server.ssrLoadModule(id + '?' + QS_SSR, { fixStacktrace: true })
          const evaluatedEntries = mod[TODAD_IDENTIFIER] as StyleEntry[]
          await createStyle(vModId, evaluatedEntries)
 
@@ -283,7 +287,9 @@ export default function (options: VitePluginToadOptions): Plugin {
          for (const dep of res.deps) {
             const resolved = await this.resolve(dep, id)
             const modInfo = this.getModuleInfo(resolved.id)
-            if (modInfo && !modInfo.id.includes('node_modules')) state[vModId].deps.push(modInfo.id)
+            if (modInfo && !modInfo.id.includes('node_modules')) {
+               state[vModId].deps.push(modInfo.id)
+            }
          }
          return result
          // return null
@@ -321,42 +327,49 @@ export default function (options: VitePluginToadOptions): Plugin {
 
    const ssr: Plugin = {
       name: 'toad:ssr',
-      async transform(code, url, opts) {
-         const [id, qs] = url.split('?')
-         if (!qs?.includes(QS_SSR)) return
+      enforce: 'pre',
 
-         const [processedCode, entries] = processModule(id, code)
+      transform: {
+         order: 'pre',
+         async handler(code, url, opts) {
+            const [id, qs] = url.split('?')
+            if (!filter(id)) return
 
-         const vModId = getToadModuleId(id)
-         const jsEntries = stringify(entries, (value, space, next, key) => {
-            if (typeof value === 'string') {
-               return `\`${value}\``
+            if (qs?.includes(QS_FULL_SKIP)) return
+            if (!opts?.ssr || !qs?.includes(QS_SSR)) return
+
+            const [processedCode, entries] = processModule(id, code)
+
+            const vModId = getToadModuleId(id)
+            const jsEntries = stringify(entries, (value, space, next, key) => {
+               if (typeof value === 'string') {
+                  return `\`${value}\``
+               }
+               return next(value)
+            })
+            let moduleCode = processedCode
+            if (options.ssr?.customSSRTransformer) {
+               try {
+                  const result = await options.ssr?.customSSRTransformer(
+                     processedCode,
+                     this,
+                     server,
+                     code,
+                     url,
+                     opts
+                  )
+                  if (result) {
+                     moduleCode = typeof result == 'string' ? result : result.code
+                  } else config.logger.warn('[toad] customSSRTransformer did not return a value')
+               } catch (e) {
+                  config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
+               }
             }
-            return next(value)
-         })
-         let moduleCode = processedCode
-         if (options.ssr?.customSSRTransformer) {
-            try {
-               const result = await options.ssr?.customSSRTransformer(
-                  processedCode,
-                  this,
-                  server,
-                  code,
-                  url,
-                  opts
-               )
-               if (result) {
-                  moduleCode = typeof result == 'string' ? result : result.code
-               } else config.logger.warn('[toad] customSSRTransformer did not return a value')
-            } catch (e) {
-               config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
-            }
-         }
-         return `
-               import "${vModId}?${QS_SSR}"
+            return `
                ${moduleCode}
                export const ${TODAD_IDENTIFIER} = ${jsEntries}
             `
+         },
       },
    }
 
@@ -364,7 +377,8 @@ export default function (options: VitePluginToadOptions): Plugin {
       name: 'toad:styles',
       async transform(code, url, opts) {
          const [id, qs] = url.split('?')
-         if (!id.startsWith(VIRTUAL_MODULE_PREFIX)) return
+         if (qs?.includes(QS_SSR)) return
+         if (!id.startsWith(VIRTUAL_MODULE_PREFIX) || qs?.includes(QS_FULL_SKIP)) return
          const mod = state[id]
          if (!mod) {
             config.logger.warn(`[toad:styles]: Unable to find cached module ${id}`)
@@ -382,3 +396,5 @@ export default function (options: VitePluginToadOptions): Plugin {
 
    return Object.assign(plugins, { name: 'toad' })
 }
+
+export { css, skipToadForUrl } from './helpers.ts'
