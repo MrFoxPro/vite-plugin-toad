@@ -1,7 +1,7 @@
 {
    "type": "module",
    "name": "vite-plugin-toad",
-   "version": "0.0.7-0",
+   "version": "0.1.0",
    "description": "Zero runtime CSS-in-JS powered by Vite",
    "main": "./dist/cjs/index.js",
    "module": "./dist/es/index.js",
