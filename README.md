@@ -1,20 +1,20 @@
-Zero-runtime CSS-in-JS tool.
-⚠ Work in progress.
+# 🌺🐸☘️
 
-HMR supported.
-
-`pnpm i -D vite-plugin-toad`
+Zero-runtime CSS-in-JS tool inspired by Linaria.
 
 Try on [StackBlitz](https://stackblitz.com/edit/solidjs-templates-lmpush?file=app%2Fapp.tsx) or check out [example](example-solid).
+
+⚠ Work in progress.
+
+`pnpm i -D vite-plugin-toad`
 
 ```tsx
 /*@toad-ext .scss*/ // This sets extension for corresponding output file.
 // You can set in plugin config globally or for each file.
 import { css } from 'vite-plugin-toad/css'
 import Constants from './constants.ts'
-css`
-   /*global*/ // this mark style as global
-   body { background-color: ${Constants.BACKGROUND_COLOR}; } // Use some static variables. Works when `ssr.evaluate = true` in plugin settings
+css`/*global*/ /* mark style as global */
+   body { background-color: ${Constants.BACKGROUND_COLOR}; } // Use some static variables. Works when 'ssr.evaluate = true' in plugin settings
    @keyframes logo-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
@@ -23,7 +23,7 @@ css`
 const App = () => (
    <div
       class={css`
-         /*@toad-debug wrapper*/  // <- this adds "wrapper" to output class
+         /*@toad-debug wrapper*/ // <- this adds "wrapper" to output class
          max-width: 800px;
          background-color: #dadada;
       `}
@@ -41,13 +41,16 @@ const App = () => (
                }
             `}
          />
-         <p> Edit <code>app.tsx</code> and save to reload.</p>
-         <a href="https://github.com/solidjs/solid" target="_blank">Learn solid</a>
+         <p>Edit <code>app.tsx</code> and save to reload. </p>
+         <a href="https://github.com/solidjs/solid" target="_blank">
+            Learn solid
+         </a>
       </header>
    </div>
 )
 ```
-For more advanced documentation, read typescript JSDoc comments.
+All CSS transforms are handled by Vite, so it will work with SASS, LightningCSS, PostCSS and other tools.  
+For more advanced documentation, please refer to typescript JSDoc comments.
 
 # Motivation
 I found following way of writing components can be convinient:
@@ -66,8 +69,31 @@ I found following way of writing components can be convinient:
    h-12 w-full p-l-10px
 />
 ```
-CSS-in-JS for creating component styles, and Atomic CSS with attributify for positioning component in layout.
-
+CSS-in-JS for creating component styles, and Atomic CSS with attributify for positioning component in layout.  
 I found this way keeps code more clean and readable. It avoids mess of long atomic classes with `?#[]@` symbols and decoupling of styles as it used to with BEM or CSS modules.
 
 I'm planning to add handling of `css=""` attribute.
+
+# Known tradeoffs
+Make sure you modules with CSS-in-JS don't use top-level DOM API if you are using `ssr: { eval: true }`. You can wrap it like in the example:
+```ts
+if (!isServer) render(App, document.body)
+```
+---
+Some plugins [don't respect vite `ssr: true` option](https://github.com/solidjs/vite-plugin-solid/pull/105) when using `ssrLoadModule`, so they need to be processed separately if you're want to use variables in template literals.  
+You can process it in `customSSRTransformer`. Make sure to output SSR-ready code.
+```ts
+ViteToad({
+   ssr: {
+      eval: true,
+      async customSSRTransformer(code, ctx, server, _c, url) {
+         solidOptions.solid.generate = 'ssr'
+         solidOptions.solid.hydratable = false
+         solidOptions.ssr = true
+         const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
+         solidOptions.solid.generate = 'dom'
+         return result
+      },
+   },
+})
+```
