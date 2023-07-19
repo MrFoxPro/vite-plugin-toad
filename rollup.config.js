@@ -5,7 +5,7 @@ import del from 'rollup-plugin-delete'
 const output = {}
 /** @type {import('rollup').RollupOptions} */
 export default {
-   input: ['./src/index.ts'],
+   input: ['./src/index.ts', "./src/css.ts"],
    external: ['vite', 'node:path', 'node:fs/promises'],
    treeshake: 'smallest',
    output: [

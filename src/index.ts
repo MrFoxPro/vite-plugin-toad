@@ -399,4 +399,6 @@ ${processedCode}
    return Object.assign(plugins, { name: 'toad' })
 }
 
-export { css, skipToadForUrl } from './helpers.ts'
+export function skipToadForUrl(url: string) {
+   return url.includes('?') ? url + '&toad-full-skip' : url + '?toad-full-skip'
+}

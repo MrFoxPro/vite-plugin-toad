@@ -5,9 +5,10 @@ HMR supported.
 `pnpm i -D vite-plugin-toad`
 
 ```tsx
-/*@toad-ext .scss*/ // This sets extension for corresponding output extension.
+/*@toad-ext .scss*/ // This sets extension for corresponding output file.
 // You can set in plugin config globally or for each file.
 
+import { css } from 'vite-plugin-toad/css'
 import Constants from './constants.ts'
 css`
    /*global*/ // this mark style as global

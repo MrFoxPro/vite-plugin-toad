@@ -2,7 +2,7 @@
 
 import { isServer, render } from 'solid-js/web'
 
-import { css } from '../../src/types.ts'
+import { css } from '../src/css.ts'
 import logo from './logo.svg'
 import Constants from './constants.ts'
 

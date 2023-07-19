@@ -12,10 +12,10 @@
          "require": "./dist/cjs/index.js",
          "types": "./dist/index.d.ts"
       },
-      "./helpers": {
-         "import": "./dist/esm/helpers.js",
-         "require": "./dist/cjs/helpers.js",
-         "types": "./dist/helpers.d.ts"
+      "./css": {
+         "import": "./dist/esm/css.js",
+         "require": "./dist/cjs/css.js",
+         "types": "./dist/css.d.ts"
       }
    },
    "files": [
