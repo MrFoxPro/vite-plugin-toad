@@ -74,6 +74,22 @@ I found this way keeps code more clean and readable. It avoids mess of long atom
 
 I'm planning to add handling of `css=""` attribute.
 
+# Usage
+
+You can use `createToadSelect` to create desired selector.
+First, set it name in plugin option: `outputExtension: '.less'`.
+Then, create it 
+```ts
+import { createToadSelect } from 'vite-plugin-toad/css'
+const { less } = createToadSelect('less')
+```
+Now you will able to use it as 
+```tsx
+   less`
+      color: blue;
+   `
+```
+
 # Known tradeoffs
 Make sure you modules with CSS-in-JS don't use top-level DOM API if you are using `ssr: { eval: true }`. You can wrap it like in the example:
 ```ts

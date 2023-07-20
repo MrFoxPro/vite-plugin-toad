@@ -12,10 +12,16 @@ export type VitePluginToadOptions = {
    include?: FilterPattern
    exclude?: FilterPattern
    /**
-    * Tag to replace.
+    * Output extension.
     * @default 'css'
     */
    outputExtension?: string
+   /**
+    * Tag name to replace.
+    * Use `createToadSelector` with this option.
+    * @default 'css'
+    */
+   tag?: string
 
    ssr?: {
       /**
@@ -103,7 +109,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       return slugify(data).slice(len)
    }
 
-   const jsRegex = new RegExp(`(css)\\s*\`([\\s\\S]*?)\``, 'gm')
+   const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    // const jsxRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
 
    // class ToadVisitor extends Visitor {
