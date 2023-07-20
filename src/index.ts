@@ -66,6 +66,13 @@ export type VitePluginToadOptions = {
     */
    transformStyle?(server: ViteDevServer, collectedSource: string): string | Promise<string>
 }
+const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
+const WS_EVENT_PREFIX = '@toad:hmr'
+const TODAD_IDENTIFIER = '__TOAD__'
+const QS_SSR = 'toad-ssr'
+const QS_FULL_SKIP = 'toad-full-skip'
+const STYLE_HASH_LEN = 5
+
 export default function (options: VitePluginToadOptions): Plugin {
    options = Object.assign(
       {
@@ -78,12 +85,6 @@ export default function (options: VitePluginToadOptions): Plugin {
       options
    )
 
-   const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
-   const WS_EVENT_PREFIX = '@toad:hmr'
-   const TODAD_IDENTIFIER = '__TOAD__'
-   const QS_SSR = 'toad-ssr'
-   const QS_FULL_SKIP = 'toad-full-skip'
-   const STYLE_HASH_LEN = 5
 
    const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    const ssrTransformCallbacks = new Map<string, () => void>()
@@ -421,5 +422,6 @@ ${processedCode}
 }
 
 export function skipToadForUrl(url: string) {
-   return url.includes('?') ? url + '&toad-full-skip' : url + '?toad-full-skip'
+   let qs =  url.includes('?') ? '&' : '?'
+   return url + qs + QS_FULL_SKIP
 }
