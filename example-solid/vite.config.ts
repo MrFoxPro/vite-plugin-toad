@@ -31,6 +31,7 @@ export default async ({ mode }: ConfigEnv) => {
          ViteSolid(solidOptions),
          ViteToad({
             // outputExtension: '.scss',
+            tag: 'css',
             ssr: {
                eval: true,
                async customSSRTransformer(code, ctx, server, _c, url) {
