@@ -2,11 +2,9 @@
 
 import { isServer, render } from 'solid-js/web'
 
-import { createToadSelect } from '../src/css.ts'
+import { css } from 'vite-plugin-toad/css'
 import logo from './logo.svg'
 import Constants from './constants.ts'
-
-const { css } = createToadSelect('css')
 
 css`
    /*global*/

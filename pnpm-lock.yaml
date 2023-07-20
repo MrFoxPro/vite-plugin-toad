@@ -90,6 +90,9 @@ importers:
       vite-plugin-solid:
         specifier: ^2.7.0
         version: 2.7.0(solid-js@1.7.8)(vite@4.4.4)
+      vite-plugin-toad:
+        specifier: link:..
+        version: link:..
       vite-plugin-universal:
         specifier: ^0.1.8
         version: 0.1.8(vite@4.4.4)
