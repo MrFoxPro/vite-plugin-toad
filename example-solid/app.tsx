@@ -2,10 +2,6 @@
 
 import { isServer, render } from 'solid-js/web'
 
-import { css } from 'vite-plugin-toad/css'
-import logo from './logo.svg'
-import Constants from './constants.ts'
-
 css`
    /*global*/
    body {
@@ -20,6 +16,11 @@ css`
       }
    }
 `
+
+import { css } from '../src/css'
+import logo from './logo.svg'
+import Constants from './constants.ts'
+import { Button, TextField } from '@kobalte/core'
 const App = () => {
    return (
       <div
@@ -42,6 +43,23 @@ const App = () => {
                   }
                `}
             />
+            <TextField.Root>
+               <TextField.Input
+                  inputmode='decimal'
+                  class={css`
+                     background-color: var(--grey-000);
+                     border: 1px solid blue;
+                     border-radius: 8px;
+                     &:focus {
+                        outline-offset: -5px;
+                        outline-color: var(--grey-000);
+                     }
+                     line-height: 3.5rem;
+                     color: var(--black-900);
+                     font-weight: 500;
+                  `}
+               />
+            </TextField.Root>
             <p>
                Edit <code>app.tsx</code> and save to reload.
             </p>
@@ -52,6 +70,6 @@ const App = () => {
       </div>
    )
 }
-if (!isServer) {
+if (!import.meta.env.SSR) {
    render(App, document.body)
 }

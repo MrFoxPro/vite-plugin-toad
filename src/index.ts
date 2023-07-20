@@ -48,7 +48,18 @@ export type VitePluginToadOptions = {
                ssr?: boolean
             },
          ]
-      ): Rollup.TransformResult | Promise<Rollup.TransformResult>
+      ): {
+         result: Rollup.TransformResult
+         cb?: () => void 
+      } | Promise<{
+         result: Rollup.TransformResult
+         cb?: () => void 
+      }>
+       /**
+       * If Vite was unable to load SSR module, you can try this.
+       * 
+       */
+      processWithSWC?: boolean
    }
    /**
     * Transform or process style of each module
@@ -66,12 +77,6 @@ export default function (options: VitePluginToadOptions): Plugin {
       },
       options
    )
-   let config: ResolvedConfig
-   let server: ViteDevServer
-   let root: string
-   let env: ConfigEnv
-
-   let lastServedTime = Date.now()
 
    const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
    const WS_EVENT_PREFIX = '@toad:hmr'
@@ -79,6 +84,16 @@ export default function (options: VitePluginToadOptions): Plugin {
    const QS_SSR = 'toad-ssr'
    const QS_FULL_SKIP = 'toad-full-skip'
    const STYLE_HASH_LEN = 5
+
+   const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
+   const ssrTransformCallbacks = new Map<string, () => void>()
+
+   let config: ResolvedConfig
+   let server: ViteDevServer
+   let root: string
+   let env: ConfigEnv
+
+   let lastServedTime = Date.now()
 
    type VirtualModuleData = {
       hash: string
@@ -108,8 +123,6 @@ export default function (options: VitePluginToadOptions): Plugin {
    function createHash(data, len) {
       return slugify(data).slice(len)
    }
-
-   const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    // const jsxRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
 
    // class ToadVisitor extends Visitor {
@@ -283,8 +296,9 @@ ${processedCode}
             await createStyle(vModId, entries)
             return result
          }
-
          const mod = await server.ssrLoadModule(id + '?' + QS_SSR, { fixStacktrace: true })
+         ssrTransformCallbacks.get(id)?.()
+         ssrTransformCallbacks.delete(id)
          const evaluatedEntries = mod[TODAD_IDENTIFIER] as StyleEntry[]
          await createStyle(vModId, evaluatedEntries)
 
@@ -338,7 +352,8 @@ ${processedCode}
          order: 'pre',
          handler(code, url, opts) {
             const [id, qs] = url.split('?')
-            if (!filter(id) || (!qs?.includes(QS_FULL_SKIP) && !qs?.includes(QS_SSR))) return
+            if (!filter(id)) return
+            if(!qs?.includes(QS_FULL_SKIP) && !qs?.includes(QS_SSR)) return
 
             const [processedCode, entries, ext] = processModule(id, code)
             const jsEntries = stringify(entries, (value, space, next, key) => {
@@ -358,18 +373,18 @@ ${processedCode}
       name: 'toad:ssr-middleware',
       enforce: 'pre',
       transform: {
-         order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
             if (!filter(id)) return
             if (qs?.includes(QS_FULL_SKIP)) return
-            if (!opts?.ssr || !qs?.includes(QS_SSR)) return
+            if (!opts?.ssr) return
 
             let moduleCode = code
             if (options.ssr?.customSSRTransformer) {
                try {
-                  const result = await options.ssr?.customSSRTransformer(code, this, server, code, url, opts)
+                  const { result, cb } = await options.ssr.customSSRTransformer(code, this, server, code, url, opts)
                   if (result) {
+                     ssrTransformCallbacks.set(id, cb)
                      moduleCode = typeof result == 'string' ? result : result.code
                   } else config.logger.warn('[toad] customSSRTransformer did not return a value')
                } catch (e) {

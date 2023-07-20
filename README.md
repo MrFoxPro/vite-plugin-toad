@@ -77,10 +77,12 @@ I'm planning to add handling of `css=""` attribute.
 # Known tradeoffs
 Make sure you modules with CSS-in-JS don't use top-level DOM API if you are using `ssr: { eval: true }`. You can wrap it like in the example:
 ```ts
-if (!isServer) render(App, document.body)
+if (!import.meta.env.SSR) {
+   render(App, document.body)
+}
 ```
 ---
-Some plugins [don't respect vite `ssr: true` option](https://github.com/solidjs/vite-plugin-solid/pull/105) when using `ssrLoadModule`, so they need to be processed separately if you're want to use variables in template literals.  
+Some [plugins](https://github.com/solidjs/vite-plugin-solid/pull/105) don't respect Vite `ssr: true` option when using `ssrLoadModule`, so they need to be processed separately if you're want to use variables in template literals.  
 You can process it in `customSSRTransformer`. Make sure to output SSR-ready code.
 ```ts
 ViteToad({
@@ -88,11 +90,14 @@ ViteToad({
       eval: true,
       async customSSRTransformer(code, ctx, server, _c, url) {
          solidOptions.solid.generate = 'ssr'
-         solidOptions.solid.hydratable = false
-         solidOptions.ssr = true
          const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
-         solidOptions.solid.generate = 'dom'
-         return result
+         return {
+            result,
+            // this will be called when we will transform all dependencies
+            cb: () => {
+               solidOptions.solid.generate = 'dom'
+            }
+         } 
       },
    },
 })

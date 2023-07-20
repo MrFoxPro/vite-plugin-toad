@@ -18,7 +18,9 @@
       "vite-plugin-civet": "^0.2.6",
       "vite-plugin-inspect": "^0.7.33",
       "vite-plugin-solid": "^2.7.0",
-      "vite-plugin-toad": "link:..",
       "vite-plugin-universal": "^0.1.8"
+   },
+   "dependencies": {
+      "@kobalte/core": "^0.9.8"
    }
 }

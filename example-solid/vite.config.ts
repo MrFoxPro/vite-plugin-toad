@@ -27,6 +27,9 @@ export default async ({ mode }: ConfigEnv) => {
       preview: {
          port: 3000,
       },
+      ssr: {
+         noExternal: ['@kobalte/core'],
+      },
       plugins: [
          ViteSolid(solidOptions),
          ViteToad({
@@ -36,11 +39,14 @@ export default async ({ mode }: ConfigEnv) => {
                eval: true,
                async customSSRTransformer(code, ctx, server, _c, url) {
                   solidOptions.solid.generate = 'ssr'
-                  solidOptions.solid.hydratable = false
-                  solidOptions.ssr = true
                   const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
-                  solidOptions.solid.generate = 'dom'
-                  return result
+                  return {
+                     result,
+                     // this will be called when we will transform all dependencies
+                     cb: () => {
+                        solidOptions.solid.generate = 'dom'
+                     }
+                  } 
                },
             },
          }),
