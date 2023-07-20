@@ -109,3 +109,10 @@ ViteToad({
    },
 })
 ```
+Currently, it may not work if styles are co-located with some legacy dependencies< or dependencies that are not intnded to be used in SSR environment. What you can do about it:
+- Split your code so your component with styles are not in the same module with bad dependency
+- Wrap your dependency in lazy `import()` inside your component near usage place, or in `if(!import.meta.env.SSR)`.
+- Try another SSR-friendly library instead
+- Make a simple Vite plugin just in your configuration to skip dependency: return empty string in Vite `load()` hook.
+- Play with Vite `ssr.external` configuration.
+It's possible that I will implement some kind of tree-shaking through SWC, so all unused in styling deps will be omitted, as Linaria do with their shaker.
