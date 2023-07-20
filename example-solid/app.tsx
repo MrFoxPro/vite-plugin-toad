@@ -1,75 +1,46 @@
-/*@toad-ext .scss*/
+/*@toad-ext .scss*/ // This sets extension for corresponding output file.
+// You can set in plugin config globally or for each file.
+import { render } from 'solid-js/web';
+import { modularScale, hiDPI } from 'polished';
+import { css } from '../src/css';
+import Constants from './constants';
+import logo from './logo.svg';
 
-import { isServer, render } from 'solid-js/web'
-
-css`
-   /*global*/
-   body {
-      background-color: ${Constants.BACKGROUND_COLOR};
-   }
+css`/*global*/ /* mark style as global */
+   body {background-color: ${Constants.BACKGROUND_COLOR};} /* Use some static variables. Works when 'ssr.evaluate = true' */
    @keyframes logo-spin {
-      from {
-         transform: rotate(0deg);
-      }
-      to {
-         transform: rotate(360deg);
-      }
+      from {transform: rotate(0deg);}
+      to {transform: rotate(360deg);}
    }
-`
-
-import { css } from '../src/css'
-import logo from './logo.svg'
-import Constants from './constants.ts'
-import { Button, TextField } from '@kobalte/core'
-const App = () => {
-   return (
-      <div
+`;
+const App = () => (
+   <div
+      class={css`
+        /*@toad-debug wrapper*/ // <- this adds "wrapper" to output class
+        max-width: 800px;
+        background-color: #dadada;
+        font-size: ${modularScale(2)};
+        ${hiDPI(1.5)} {
+          font-size: ${modularScale(2.5)};
+        }
+      `}
+   >
+      <img
+         src={logo}
          class={css`
-            /*@toad-debug wrapper*/
-            max-width: 800px;
-            background-color: #dadada;
-         `}
-      >
-         <header>
-            <img
-               src={logo}
-               class={css`
-                  animation: logo-spin infinite 10s linear;
-                  height: 40vmin;
-                  pointer-events: none;
-                  & ~ p {
-                     $variable: blue;
-                     color: #{$variable}; // SCSS!
-                  }
-               `}
-            />
-            <TextField.Root>
-               <TextField.Input
-                  inputmode='decimal'
-                  class={css`
-                     background-color: var(--grey-000);
-                     border: 1px solid blue;
-                     border-radius: 8px;
-                     &:focus {
-                        outline-offset: -5px;
-                        outline-color: var(--grey-000);
-                     }
-                     line-height: 3.5rem;
-                     color: var(--black-900);
-                     font-weight: 500;
-                  `}
-               />
-            </TextField.Root>
-            <p>
-               Edit <code>app.tsx</code> and save to reload.
-            </p>
-            <a href="https://github.com/solidjs/solid" target="_blank" rel="noopener noreferrer">
-               Learn solid
-            </a>
-         </header>
-      </div>
-   )
-}
+          animation: logo-spin infinite 10s linear;
+          height: 40vmin;
+          pointer-events: none;
+          & ~ p {
+              $variable: blue;
+              color: #{$variable}; // This code will work as we set .scss extension
+          }
+        `}
+      />
+      <p>Edit <code>app.tsx</code> and save to reload</p>
+      <a href="https://github.com/solidjs/solid" target="_blank" > Learn solid </a>
+   </div>
+);
 if (!import.meta.env.SSR) {
-   render(App, document.body)
+   render(App, document.body);
 }

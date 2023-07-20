@@ -21,6 +21,7 @@
       "vite-plugin-universal": "^0.1.8"
    },
    "dependencies": {
-      "@kobalte/core": "^0.9.8"
+      "@kobalte/core": "^0.9.8",
+      "polished": "^4.2.2"
    }
 }
