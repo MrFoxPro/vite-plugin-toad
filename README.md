@@ -27,25 +27,25 @@ css`/*global*/ /* mark style as global */
 const App = () => (
    <div
       class={css`
-        /*@toad-debug wrapper*/ // <- this adds "wrapper" to output class
-        max-width: 800px;
-        background-color: #dadada;
-        font-size: ${modularScale(2)};
-        ${hiDPI(1.5)} {
-          font-size: ${modularScale(2.5)};
-        }
+         /*@toad-debug wrapper*/ // <- this adds "wrapper" to output class
+         max-width: 800px;
+         background-color: #dadada;
+         font-size: ${modularScale(2)};
+         ${hiDPI(1.5)} {
+            font-size: ${modularScale(2.5)};
+         }
       `}
    >
       <img
          src={logo}
          class={css`
-          animation: logo-spin infinite 10s linear;
-          height: 40vmin;
-          pointer-events: none;
-          & ~ p {
-              $variable: blue;
-              color: #{$variable}; // This code will work as we set .scss extension
-          }
+            animation: logo-spin infinite 10s linear;
+            height: 40vmin;
+            pointer-events: none;
+            & ~ p {
+               $variable: blue;
+               color: #{$variable}; // This code will work as we set .scss extension
+            }
         `}
       />
       <p>Edit <code>app.tsx</code> and save to reload</p>
