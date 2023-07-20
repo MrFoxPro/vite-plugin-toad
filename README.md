@@ -109,7 +109,7 @@ ViteToad({
    },
 })
 ```
-Currently, it may not work if styles are co-located with some legacy dependencies< or dependencies that are not intnded to be used in SSR environment. What you can do about it:
+Currently, it may not work if styles are co-located with some legacy dependencies / or dependencies that are not intended to be used in SSR environment. What you can do about it:
 - Split your code so your component with styles are not in the same module with bad dependency
 - Wrap your dependency in lazy `import()` inside your component near usage place, or in `if(!import.meta.env.SSR)`.
 - Try another SSR-friendly library instead
