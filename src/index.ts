@@ -353,8 +353,8 @@ export default function(options: VitePluginToadOptions): Plugin {
          const mods = []
          const entries = Object.values(files)
          for (const mod of ctx.modules) {
-            const target = Array.from(mod.importers).find(m => entries.some(e => e.fakeId === m.id))
-
+            console.log(mod.id, Array.from(mod.importers).map(x => x.id))
+            const target = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
             if (target) {
                logger.info(`${colors.blue(`Found target to include in as dependency in HMR: ${target.id}`)}`, {
                   timestamp: true,
@@ -369,6 +369,7 @@ export default function(options: VitePluginToadOptions): Plugin {
             const toadMod = server.moduleGraph.getModuleById(related.sourceId)
             mods.push(toadMod)
          }
+         console.log(mods.map(m => m.id))
          return mods
       },
    }

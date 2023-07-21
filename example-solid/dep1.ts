@@ -1,3 +1,3 @@
 export default {
-   BACKGROUND_COLOR: 'blue',
+   BACKGROUND_COLOR: 'green',
 } as const
