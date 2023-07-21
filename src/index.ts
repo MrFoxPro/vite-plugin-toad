@@ -282,7 +282,7 @@ export default function(options: VitePluginToadOptions): Plugin {
                sourceCode: code,
                deps: [],
                style: {
-                  id: baseId + output.ext,
+                  id: baseId + (output.ext ?? options.outputExtension),
                },
             }
             files[baseId] = file
@@ -359,7 +359,6 @@ export default function(options: VitePluginToadOptions): Plugin {
       name: 'toad:ssr',
       enforce: 'pre',
       load: {
-         order: 'pre',
          handler(url, options) {
             const [id, qs] = url.split('?')
             const file = files[getBaseId(id)]
@@ -383,7 +382,6 @@ export default function(options: VitePluginToadOptions): Plugin {
             const file = files[getBaseId(id)]
 
             if (options.ssr?.customSSRTransformer) {
-               customTransform:
                try {
                   const { result, cb } = await options.ssr.customSSRTransformer(
                      code,
@@ -393,14 +391,12 @@ export default function(options: VitePluginToadOptions): Plugin {
                      id.replace(VIRTUAL_MODULE_PREFIX, '/'),
                      opts,
                   )
-                  if (!result) {
-                     config.logger.warn('[toad] customSSRTransformer did not return a value')
-                     break customTransform
+                  if (result) {
+                     if (file) {
+                        ssrTransformCallbacks.set(getBaseId(id), cb)
+                     }
+                     target = typeof result == 'string' ? result : result.code
                   }
-                  if (file) {
-                     ssrTransformCallbacks.set(getBaseId(id), cb)
-                  }
-                  target = typeof result == 'string' ? result : result.code
                } catch (e) {
                   config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
                }
