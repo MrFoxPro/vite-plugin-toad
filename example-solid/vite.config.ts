@@ -17,8 +17,8 @@ export default async ({ mode }: ConfigEnv) => {
          generate: 'dom',
       },
       typescript: {
-         onlyRemoveTypeImports: true
-      }
+         onlyRemoveTypeImports: true,
+      },
    }
 
    const config: UserConfig = {
@@ -44,14 +44,15 @@ export default async ({ mode }: ConfigEnv) => {
                   solidOptions.solid.generate = 'ssr'
                   const solidPlugin = server.config.plugins.find(p => p.name === 'solid')
                   const result = await solidPlugin.transform(code, skipToadForUrl(url), { ssr: true })
+                  // or
                   // const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
                   return {
                      result,
                      // this will be called when we will transform all dependencies
                      cb: () => {
                         solidOptions.solid.generate = 'dom'
-                     }
-                  } 
+                     },
+                  }
                },
             },
          }),

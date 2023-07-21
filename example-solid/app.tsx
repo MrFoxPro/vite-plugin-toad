@@ -16,10 +16,9 @@ css`/*global*/ /* mark style as global */
 const App = () => (
    <div
       class={css`
-        /*@toad-debug wrapper*/ // <- this adds "wrapper" to output class
          max-width: 400px;
          background-color: #dadada;
-         font-size: ${modularScale(2)};
+         font-size: ${modularScale(1)};
          ${hiDPI(1.5)} {
             font-size: ${modularScale(2.5)};
          }
@@ -29,7 +28,7 @@ const App = () => (
          src={logo}
          class={css`
           animation: logo-spin infinite 10s linear;
-          height: 40vmin;
+          height: 30vmin;
           pointer-events: none;
           & ~ p {
               $variable: blue;

@@ -116,10 +116,6 @@ export default function(options: VitePluginToadOptions): Plugin {
    const filter = createFilter(options.include, options.exclude)
    const rootRel = (p: string) => path.relative(root, p)
 
-   function createHash(data, len) {
-      return slugify(data)
-   }
-
    function toValidCSSIdentifier(s: string) {
       return s.replace(/[^-_a-z0-9\u00A0-\uFFFF]/gi, '_').replace(/^\d/, '_')
    }
@@ -152,7 +148,9 @@ export default function(options: VitePluginToadOptions): Plugin {
             parts.push(debugName)
          }
 
-         parts.push(createHash(src, 3))
+         // to match SSR with common
+         const castrated = src.replaceAll(/\$\{.+\}/gi, '')
+         parts.push(slugify(castrated))
          const classId = toValidCSSIdentifier(parts.join('-'))
          entries.push({ classId, src, isGlobal })
          return isGlobal ? '' : `"${classId}"`
@@ -243,7 +241,11 @@ export default function(options: VitePluginToadOptions): Plugin {
          lastServedTime = Date.now()
          return file.style.sheet
       },
-      resolveId(id) {
+      resolveId(url) {
+         const [id, qs] = url.split('?')
+         if (qs?.includes(QS_FULL_SKIP)) {
+            return
+         }
          if (isVirtual(id)) {
             return id
          }
@@ -313,7 +315,6 @@ export default function(options: VitePluginToadOptions): Plugin {
                ssrTransformCallbacks.get(baseId)?.()
                ssrTransformCallbacks.delete(baseId)
                output.entries = ssrModule[TODAD_IDENTIFIER].entries as ParsedOutput['entries']
-
             }
             file.style.sheet = await createStyle(output.entries)
             file.style.hash = slugify(file.style.sheet)
@@ -380,20 +381,36 @@ export default function(options: VitePluginToadOptions): Plugin {
          order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
-            if ((!isVirtual(id) && !filter(id)) || qs?.includes(QS_FULL_SKIP) || !opts?.ssr) {
+            if ((!isVirtual(id) && !filter(id)) || !opts?.ssr) {
                return
             }
 
+            const isThirdLayer = qs?.includes(QS_FULL_SKIP)
             let target: string = code
-            const file = files[getBaseId(id)]
+            let entries: StyleEntry[]
 
-            if (options.ssr?.customSSRTransformer) {
+            const fileId = isThirdLayer ? getModuleVirtualId(getBaseId(id)) : getBaseId(id)
+            const file = files[fileId]
+
+            if (file) {
+               const result = await parseModule(file.sourceId, target)
+               entries = result.entries
+               target = result.replaced
+               const jsified = stringify({ entries }, (value, space, next, key) => {
+                  if (typeof value === 'string') {
+                     return `\`${value}\``
+                  }
+                  return next(value)
+               })
+               target += '\n' + `export const ${TODAD_IDENTIFIER} = ${jsified}`
+            }
+            if (!isThirdLayer && options.ssr?.customSSRTransformer) {
                try {
                   const { result, cb } = await options.ssr.customSSRTransformer(
-                     code,
+                     target,
                      this,
                      server,
-                     code,
+                     target,
                      id.replace(VIRTUAL_MODULE_PREFIX, '/'),
                      opts,
                   )
@@ -404,21 +421,10 @@ export default function(options: VitePluginToadOptions): Plugin {
                      target = typeof result == 'string' ? result : result.code
                   }
                } catch (e) {
-                  config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
+                  config.logger.error('[toad] Failed to transform using custom transformer')
                }
-            }
-            if (!file) {
-               return target
             }
 
-            const { entries } = await parseModule(file.sourceId, target)
-            const jsified = stringify({ entries }, (value, space, next, key) => {
-               if (typeof value === 'string') {
-                  return `\`${value}\``
-               }
-               return next(value)
-            })
-            target += '\n' + `export const ${TODAD_IDENTIFIER} = ${jsified}`
             return target
          },
       },
