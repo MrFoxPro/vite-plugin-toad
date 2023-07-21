@@ -268,7 +268,7 @@ export default function(options: VitePluginToadOptions): Plugin {
             server = await createServer({
                configFile: false,
                mode: 'production',
-               logLevel: 'silent',
+               logLevel: 'warn',
                server: {
                   middlewareMode: true,
                },
@@ -368,6 +368,11 @@ export default function(options: VitePluginToadOptions): Plugin {
       handleHotUpdate(ctx) {
          const mods = []
          for (const mod of ctx.modules) {
+            // if(mod.importers.)
+            const file = Object.values(files).find(file => file.deps.includes(mod.id))
+            if(file) {
+               mods.push(server.moduleGraph.getModuleById(file.sourceId))
+            }
             const related = files[getModuleVirtualId(getBaseId(mod.id))]
             if (!related) {
                continue
