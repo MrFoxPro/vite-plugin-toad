@@ -90,7 +90,7 @@ async function makeStyleDefault(entries: StyleEntry[]) {
    return source
 }
 
-const VIRTUAL_MODULE_PREFIX = '\0' + '@toad/'
+const VIRTUAL_MODULE_PREFIX = '@toad/'
 const WS_EVENT_PREFIX = '@toad:hmr'
 const TODAD_IDENTIFIER = '__TOAD__'
 const QS_FULL_SKIP = 'toad-full-skip'
