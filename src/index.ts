@@ -267,7 +267,7 @@ export default function(options: VitePluginToadOptions): Plugin {
             server = await createServer({
                configFile: false,
                mode: 'production',
-               logLevel: 'warn',
+               logLevel: 'silent',
                server: {
                   middlewareMode: true,
                },
@@ -377,7 +377,7 @@ export default function(options: VitePluginToadOptions): Plugin {
       name: 'toad:ssr',
       enforce: 'pre',
       async resolveId(url, importer, options) {
-         if (!isVirtual(importer)) {
+         if (!importer || !isVirtual(importer)) {
             return
          }
          const [id, qs] = url.split('?')
