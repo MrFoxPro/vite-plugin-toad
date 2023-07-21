@@ -180,14 +180,14 @@ export default function(options: VitePluginToadOptions): Plugin {
    }
 
    type Style = {
-      id?: string
+      id: string
       sheet?: string
-      hash: string
+      hash?: string
    }
    type File = {
       sourceId: string
       sourceCode: string
-      fakeId?: string
+      fakeId: string
 
       // output?: string // filled at runtime
       deps?: string[]
@@ -195,7 +195,7 @@ export default function(options: VitePluginToadOptions): Plugin {
       style?: Style // filled at runtime
       entries?: StyleEntry[] // filled at runtime
    }
-   const getModuleFakeId = (baseId: string) => path.posix.join(VIRTUAL_MODULE_PREFIX, baseId)
+   const getModuleVirtualId = (baseId: string) => path.posix.join(VIRTUAL_MODULE_PREFIX, baseId)
    const getBaseId = (id: string) => {
       const extLess = id.slice(0, id.lastIndexOf('.'))
       return extLess
@@ -226,12 +226,18 @@ export default function(options: VitePluginToadOptions): Plugin {
       },
       async load(url, opts) {
          const [id, qs] = url.split('?')
-         if (!id.startsWith(VIRTUAL_MODULE_PREFIX) || qs?.includes(QS_FULL_SKIP)) {
+         if (!isVirtual(id) || qs?.includes(QS_FULL_SKIP)) {
             return
          }
+
          const file = files[getBaseId(id)]
-         if (!file?.style?.sheet) {
-            return '' // Return empty because we didn't process with ssrLoadModule yet
+         if (!file || id !== file.style.id) {
+            return
+         }
+
+         if (!file.style?.sheet) {
+            // Return empty because we didn't process with ssrLoadModule yet
+            return ''
          }
          lastServedTime = Date.now()
          return file.style.sheet
@@ -253,7 +259,7 @@ export default function(options: VitePluginToadOptions): Plugin {
          }
       },
       transform: {
-         // order: 'post',
+         order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
             if (!filter(id) || isVirtual(id)) {
@@ -270,41 +276,42 @@ export default function(options: VitePluginToadOptions): Plugin {
                return
             }
 
-            const baseId = getModuleFakeId(getBaseId(id))
+            const baseId = getModuleVirtualId(getBaseId(id))
             const file: File = {
                sourceId: id,
+               fakeId: getModuleVirtualId(id),
                sourceCode: code,
                deps: [],
+               style: {
+                  id: baseId + output.ext,
+               },
             }
+
             files[baseId] = file
 
             if (options.ssr?.eval) {
-               const fakeModuleId = getModuleFakeId(id)
+               const fakeModuleId = getModuleVirtualId(id)
                const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
-               ssrTransformCallbacks.get(id)?.()
-               ssrTransformCallbacks.delete(id)
+               
+               ssrTransformCallbacks.get(baseId)?.()
+               ssrTransformCallbacks.delete(baseId)
 
-               const res = await server.ssrTransform(code, null, id)
-               for (const dep of res.deps) {
-                  const resolved = await this.resolve(dep, id)
-                  if (!resolved) {
-                     continue
-                  }
-                  const modInfo = this.getModuleInfo(resolved.id)
-                  if (modInfo && !modInfo.id.includes('node_modules')) {
-                     file.deps.push(modInfo.id)
-                  }
-               }
+               // const res = await server.ssrTransform(code, null, id)
+               // for (const dep of res.deps) {
+               //    const resolved = await this.resolve(dep, id)
+               //    if (!resolved) {
+               //       continue
+               //    }
+               //    const modInfo = this.getModuleInfo(resolved.id)
+               //    if (modInfo && !modInfo.id.includes('node_modules')) {
+               //       file.deps.push(modInfo.id)
+               //    }
+               // }
                output.entries = ssrModule[TODAD_IDENTIFIER].entries as ParsedOutput['entries']
             }
 
-            const sheet = await createStyle(output.entries)
-            const hash = createHash(sheet, STYLE_HASH_LEN)
-            file.style = {
-               sheet,
-               hash,
-               id: getBaseId(id) + output.ext,
-            }
+            file.style.sheet = await createStyle(output.entries)
+            file.style.hash = createHash(file.style.sheet, STYLE_HASH_LEN)
 
             let result: string = `
                import "${file.style.id}"
@@ -356,27 +363,28 @@ export default function(options: VitePluginToadOptions): Plugin {
       name: 'toad:ssr',
       enforce: 'pre',
       load: {
+         order: 'pre',
          handler(url, options) {
             const [id, qs] = url.split('?')
-            if (!filter(id) || !isVirtual(id)) {
-               return
-            }
             const file = files[getBaseId(id)]
             if (!file) {
-               console.warn('unable to find fake SSR module for', id)
                return
             }
-            return file.sourceCode
+            if (id === file.fakeId) {
+               return file.sourceCode
+            }
          },
       },
       transform: {
+         order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
             if (!filter(id) || qs?.includes(QS_FULL_SKIP) || !opts?.ssr) {
                return
             }
 
-            let transformed: string = isVirtual(id) ? 
+            let target: string = code
+            const file = files[getBaseId(id)]
 
             if (options.ssr?.customSSRTransformer) {
                customTransform:
@@ -386,38 +394,31 @@ export default function(options: VitePluginToadOptions): Plugin {
                      config.logger.warn('[toad] customSSRTransformer did not return a value')
                      break customTransform
                   }
-                  ssrTransformCallbacks.set(id, cb)
-                  transformed = typeof result == 'string' ? result : result.code
+                  ssrTransformCallbacks.set(getBaseId(id), cb)
+                  target = typeof result == 'string' ? result : result.code
                } catch (e) {
                   config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
                }
             }
-
-            transformed ??= code
-            if (!isVirtual(id)) {
-               return transformed
-            }
-
-            const file = files[getBaseId(id)]
             if (!file) {
-               return transformed
+               return target
             }
 
-            const { entries } = await parseModule(file.sourceId, transformed)
+            const { entries } = await parseModule(file.sourceId, target)
             const jsified = stringify({ entries }, (value, space, next, key) => {
                if (typeof value === 'string') {
                   return `\`${value}\``
                }
                return next(value)
             })
-            transformed += '\n' + `export const ${TODAD_IDENTIFIER} = ${jsified}`
-            return transformed
+            target += '\n' + `export const ${TODAD_IDENTIFIER} = ${jsified}`
+            return target
          },
       },
    }
 
    const plugins = [main]
-   if (options.ssr?.customSSRTransformer) {
+   if (options.ssr?.eval) {
       plugins.push(ssr)
    }
 
