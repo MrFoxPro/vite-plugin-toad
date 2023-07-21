@@ -92,7 +92,6 @@ export default function (options: VitePluginToadOptions): Plugin {
    let config: ResolvedConfig
    let server: ViteDevServer
    let root: string
-   let env: ConfigEnv
 
    let lastServedTime = Date.now()
 
@@ -108,36 +107,10 @@ export default function (options: VitePluginToadOptions): Plugin {
    } = {}
 
    const filter = createFilter(options.include, options.exclude)
-   const rootAbs = (p: string) => path.resolve(root, p)
    const rootRel = (p: string) => path.relative(root, p)
-   const comparePaths = (p1: string, p2: string) => {
-      p1 = path.normalize(p1)
-      p2 = path.normalize(p2)
-      if (!path.isAbsolute(p1)) p1 = rootAbs(p1)
-      if (!path.isAbsolute(p2)) p2 = rootAbs(p2)
-      return p1 === p2
-   }
-   const prettifyPath = (p: string) => {
-      if (path.isAbsolute(p)) p = rootRel(p)
-      return '/' + normalizePath(p)
-   }
    function createHash(data, len) {
       return slugify(data).slice(len)
    }
-   // const jsxRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
-
-   // class ToadVisitor extends Visitor {
-   //    visitModule(m: swc.Module): swc.Module {
-   //       return super.visitModule(m)
-   //    }
-   //    visitIdentifier(node) {
-   //       return node
-   //    }
-
-   //    visitTsType(node) {
-   //       return node
-   //    }
-   // }
 
    function getToadModuleId(modId: string, ext = options.outputExtension) {
       ext ??= options.outputExtension
@@ -208,7 +181,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       name: 'toad:main',
       enforce: 'pre',
       config(_config, _env) {
-         env = _env
+         // env = _env
       },
       configResolved(_config) {
          config = _config
