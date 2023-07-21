@@ -91,7 +91,7 @@ const VIRTUAL_MODULE_PREFIX = '/@toad/'
 const WS_EVENT_PREFIX = '@toad:hmr'
 const TODAD_IDENTIFIER = '__TOAD__'
 const QS_FULL_SKIP = 'toad-full-skip'
-const STYLE_HASH_LEN = 5
+const STYLE_HASH_LEN = 8
 
 export default function(options: VitePluginToadOptions): Plugin {
    options = Object.assign(
@@ -118,7 +118,7 @@ export default function(options: VitePluginToadOptions): Plugin {
    const rootRel = (p: string) => path.relative(root, p)
 
    function createHash(data, len) {
-      return slugify(data).slice(len)
+      return slugify(data)
    }
 
    function toValidCSSIdentifier(s: string) {
@@ -259,10 +259,9 @@ export default function(options: VitePluginToadOptions): Plugin {
          }
       },
       transform: {
-         order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
-            if (!filter(id) || isVirtual(id)) {
+            if (!filter(id) || isVirtual(id) || qs?.includes(QS_FULL_SKIP)) {
                return
             }
 
@@ -286,42 +285,44 @@ export default function(options: VitePluginToadOptions): Plugin {
                   id: baseId + output.ext,
                },
             }
-
             files[baseId] = file
 
+            const fakeModuleId = getModuleVirtualId(id)
             if (options.ssr?.eval) {
-               const fakeModuleId = getModuleVirtualId(id)
+               const prevFakeModuke = server.moduleGraph.getModuleById(fakeModuleId)
+               if (prevFakeModuke) {
+                  server.moduleGraph.invalidateModule(prevFakeModuke)
+               }
                const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
-               
+
                ssrTransformCallbacks.get(baseId)?.()
                ssrTransformCallbacks.delete(baseId)
 
-               // const res = await server.ssrTransform(code, null, id)
-               // for (const dep of res.deps) {
-               //    const resolved = await this.resolve(dep, id)
-               //    if (!resolved) {
-               //       continue
-               //    }
-               //    const modInfo = this.getModuleInfo(resolved.id)
-               //    if (modInfo && !modInfo.id.includes('node_modules')) {
-               //       file.deps.push(modInfo.id)
-               //    }
-               // }
+               const res = await server.ssrTransform(code, null, id)
+               for (const dep of res.deps) {
+                  const resolved = await this.resolve(dep, id)
+                  if (!resolved) {
+                     continue
+                  }
+                  const modInfo = this.getModuleInfo(resolved.id)
+                  if (modInfo && !modInfo.id.includes('node_modules')) {
+                     file.deps.push(modInfo.id)
+                  }
+               }
                output.entries = ssrModule[TODAD_IDENTIFIER].entries as ParsedOutput['entries']
             }
-
             file.style.sheet = await createStyle(output.entries)
-            file.style.hash = createHash(file.style.sheet, STYLE_HASH_LEN)
+            file.style.hash = slugify(file.style.sheet)
 
             let result: string = `
                import "${file.style.id}"
                ${output.replaced}
             `
 
-            if (!opts?.ssr && code.includes('import.meta.hot')) {
+            if (!opts?.ssr) {
                result += `
                if (import.meta.hot) {
-                  try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${id}", "${file.style.hash}"]); }
+                  try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${baseId}", "${file.style.hash}"]); }
                   catch (e) { console.warn('${WS_EVENT_PREFIX}', e) }
                   if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 100))
                }
@@ -342,20 +343,15 @@ export default function(options: VitePluginToadOptions): Plugin {
       // Idk but it works fine without
       // fuck Vite tbh, undocumented + dead discord community
       handleHotUpdate(ctx) {
-         const mods = ctx.modules
-         for (const mod of mods) {
-            // server.moduleGraph.invalidateModule(mod)
-            const related = files[mod.id]
+         const mods = []
+         for (const mod of ctx.modules) {
+            const related = files[getModuleVirtualId(getBaseId(mod.id))]
             if (!related) {
                continue
             }
-            const toadMod = server.moduleGraph.getModuleById(related[0])
-            if (toadMod) {
-               server.moduleGraph.invalidateModule(toadMod)
-               console.log('invalidated', toadMod.id)
-            }
+            const toadMod = server.moduleGraph.getModuleById(related.sourceId)
+            mods.push(toadMod)
          }
-         console.log(mods)
          return mods
       },
    }
@@ -389,12 +385,21 @@ export default function(options: VitePluginToadOptions): Plugin {
             if (options.ssr?.customSSRTransformer) {
                customTransform:
                try {
-                  const { result, cb } = await options.ssr.customSSRTransformer(code, this, server, code, url, opts)
+                  const { result, cb } = await options.ssr.customSSRTransformer(
+                     code,
+                     this,
+                     server,
+                     code,
+                     id.replace(VIRTUAL_MODULE_PREFIX, '/'),
+                     opts,
+                  )
                   if (!result) {
                      config.logger.warn('[toad] customSSRTransformer did not return a value')
                      break customTransform
                   }
-                  ssrTransformCallbacks.set(getBaseId(id), cb)
+                  if (file) {
+                     ssrTransformCallbacks.set(getBaseId(id), cb)
+                  }
                   target = typeof result == 'string' ? result : result.code
                } catch (e) {
                   config.logger.error('[toad] Failed to transform using custom transformer', { error: e })

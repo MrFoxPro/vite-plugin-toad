@@ -17,7 +17,7 @@ const App = () => (
    <div
       class={css`
         /*@toad-debug wrapper*/ // <- this adds "wrapper" to output class
-         max-width: 600px;
+         max-width: 400px;
          background-color: #dadada;
          font-size: ${modularScale(2)};
          ${hiDPI(1.5)} {
