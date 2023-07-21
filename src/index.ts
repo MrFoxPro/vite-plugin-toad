@@ -354,7 +354,12 @@ export default function(options: VitePluginToadOptions): Plugin {
          const entries = Object.values(files)
          for (const mod of ctx.modules) {
             const target = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
+
             if (target) {
+               logger.info(`${colors.blue(`Found target to include in as dependency in HMR: ${target.id}`)}`, {
+                  timestamp: true,
+               })
+               logger.info(`${colors.blue(`${mod.id}`)}`, { timestamp: true })
                mods.push(target)
             }
             const related = files[getModuleVirtualId(getBaseId(mod.id))]
