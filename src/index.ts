@@ -87,11 +87,10 @@ async function makeStyleDefault(entries: StyleEntry[]) {
    return source
 }
 
-const VIRTUAL_MODULE_PREFIX = '/@toad/'
+const VIRTUAL_MODULE_PREFIX = '\0' + '@toad/'
 const WS_EVENT_PREFIX = '@toad:hmr'
 const TODAD_IDENTIFIER = '__TOAD__'
 const QS_FULL_SKIP = 'toad-full-skip'
-const STYLE_HASH_LEN = 8
 
 export default function(options: VitePluginToadOptions): Plugin {
    options = Object.assign(
@@ -105,7 +104,7 @@ export default function(options: VitePluginToadOptions): Plugin {
       options,
    )
 
-   const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
+   const styleRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    const ssrTransformCallbacks = new Map<string, () => void>()
 
    let config: ResolvedConfig
@@ -131,11 +130,13 @@ export default function(options: VitePluginToadOptions): Plugin {
       entries: StyleEntry[]
    }
 
+   // It may be splitted for performance
+   // But I can't imagine how
    async function parseModule(id: string, code: string): Promise<ParsedOutput> {
       const entries: StyleEntry[] = []
       const relId = rootRel(id)
       const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
-      const replaced = code.replaceAll(jsRegex, (substring, tag, _src) => {
+      const replaced = code.replaceAll(styleRegex, (substring, tag, _src) => {
          const src = _src.trim() as string
 
          const filename = relId.replace(path.extname(relId), '')
@@ -243,7 +244,7 @@ export default function(options: VitePluginToadOptions): Plugin {
          return file.style.sheet
       },
       resolveId(id) {
-         if (id.startsWith(VIRTUAL_MODULE_PREFIX)) {
+         if (isVirtual(id)) {
             return id
          }
       },
@@ -259,6 +260,7 @@ export default function(options: VitePluginToadOptions): Plugin {
          }
       },
       transform: {
+         order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
             if (!filter(id) || isVirtual(id) || qs?.includes(QS_FULL_SKIP)) {
@@ -293,12 +295,8 @@ export default function(options: VitePluginToadOptions): Plugin {
                if (prevFakeModuke) {
                   server.moduleGraph.invalidateModule(prevFakeModuke)
                }
-               const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
-
-               ssrTransformCallbacks.get(baseId)?.()
-               ssrTransformCallbacks.delete(baseId)
-
-               const res = await server.ssrTransform(code, null, id)
+               // First transformRequest and only then ssrLoadModule! Order does matter
+               const res = await server.transformRequest(fakeModuleId, { ssr: true })
                for (const dep of res.deps) {
                   const resolved = await this.resolve(dep, id)
                   if (!resolved) {
@@ -309,7 +307,13 @@ export default function(options: VitePluginToadOptions): Plugin {
                      file.deps.push(modInfo.id)
                   }
                }
+
+               const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
+
+               ssrTransformCallbacks.get(baseId)?.()
+               ssrTransformCallbacks.delete(baseId)
                output.entries = ssrModule[TODAD_IDENTIFIER].entries as ParsedOutput['entries']
+
             }
             file.style.sheet = await createStyle(output.entries)
             file.style.hash = slugify(file.style.sheet)
@@ -324,11 +328,12 @@ export default function(options: VitePluginToadOptions): Plugin {
                if (import.meta.hot) {
                   try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${baseId}", "${file.style.hash}"]); }
                   catch (e) { console.warn('${WS_EVENT_PREFIX}', e) }
-                  if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 100))
+                  if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 300))
                }
             `
             }
 
+            // After updating styles, need to refetch them
             const sMod = server.moduleGraph.getModuleById(file.style.id)
             if (sMod) {
                server.moduleGraph.invalidateModule(sMod)
@@ -359,6 +364,7 @@ export default function(options: VitePluginToadOptions): Plugin {
       name: 'toad:ssr',
       enforce: 'pre',
       load: {
+         order: 'pre',
          handler(url, options) {
             const [id, qs] = url.split('?')
             const file = files[getBaseId(id)]
@@ -374,7 +380,7 @@ export default function(options: VitePluginToadOptions): Plugin {
          order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
-            if (!filter(id) || qs?.includes(QS_FULL_SKIP) || !opts?.ssr) {
+            if ((!isVirtual(id) && !filter(id)) || qs?.includes(QS_FULL_SKIP) || !opts?.ssr) {
                return
             }
 
