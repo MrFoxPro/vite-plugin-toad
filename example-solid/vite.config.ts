@@ -24,14 +24,12 @@ export default async ({ mode }: ConfigEnv) => {
    const config: UserConfig = {
       base: '/',
       clearScreen: false,
+      logLevel: 'info',
       server: {
          port: 3000,
       },
       preview: {
          port: 3000,
-      },
-      ssr: {
-         noExternal: ['@kobalte/core'],
       },
       plugins: [
          ViteSolid(solidOptions),
