@@ -43,9 +43,9 @@ export default async ({ mode }: ConfigEnv) => {
                async customSSRTransformer(code, ctx, server, _c, url) {
                   solidOptions.solid.generate = 'ssr'
                   const solidPlugin = server.config.plugins.find(p => p.name === 'solid')
-                  // const result = await solidPlugin.transform(code, skipToadForUrl(url), { ssr: true })
+                  const result = await solidPlugin.transform(code, skipToadForUrl(url), { ssr: true })
                   // or
-                  const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
+                  // const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
                   return {
                      result,
                      // this will be called when we will transform all dependencies

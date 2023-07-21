@@ -272,7 +272,7 @@ export default function(options: VitePluginToadOptions): Plugin {
                   middlewareMode: true,
                },
                // @ts-ignore
-               plugins: config.plugins
+               plugins: config.plugins,
             })
          }
          return
@@ -353,8 +353,8 @@ export default function(options: VitePluginToadOptions): Plugin {
          const mods = []
          const entries = Object.values(files)
          for (const mod of ctx.modules) {
-            const target = Array.from(mod.importers).find(m => entries.some(e=> e.sourceId === m.id))
-            if(target) {
+            const target = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
+            if (target) {
                mods.push(target)
             }
             const related = files[getModuleVirtualId(getBaseId(mod.id))]
@@ -370,6 +370,20 @@ export default function(options: VitePluginToadOptions): Plugin {
    const ssr: Plugin = {
       name: 'toad:ssr',
       enforce: 'pre',
+      async resolveId(url, importer, options) {
+         if (!isVirtual(importer)) {
+            return
+         }
+         const [id, qs] = url.split('?')
+         const file = files[getBaseId(importer)]
+         if (!file) {
+            logger.error("can't find file " + id)
+            return
+         }
+         // const res = path.resolve(path.dirname(file.sourceId), url)
+         const res = await this.resolve(url, file.sourceId)
+         return res
+      },
       load: {
          order: 'pre',
          handler(url, options) {
@@ -410,6 +424,7 @@ export default function(options: VitePluginToadOptions): Plugin {
                })
                target += '\n' + `export const ${TODAD_IDENTIFIER} = ${jsified}`
             }
+
             if (!isThirdLayer && options.ssr?.customSSRTransformer) {
                try {
                   const { result, cb } = await options.ssr.customSSRTransformer(
