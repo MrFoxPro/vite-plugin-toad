@@ -55,6 +55,6 @@
    },
    "dependencies": {
       "javascript-stringify": "^2.1.0",
-      "outdent": "^0.8.0"
+      "picocolors": "^1.0.0"
    }
 }

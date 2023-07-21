@@ -1,10 +1,13 @@
 import * as path from 'node:path'
 
-import type { ConfigEnv, FilterPattern, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
-import { createFilter, createServer, normalizePath } from 'vite'
+import type { FilterPattern, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
+import { createFilter, createLogger, createServer, normalizePath } from 'vite'
 import { stringify } from 'javascript-stringify'
+// @ts-ignore
+import colors from 'picocolors'
 
 import { slugify } from './slugify.ts'
+
 // import { Visitor } from '@swc/core/Visitor'
 // import type * as swc from '@swc/core'
 
@@ -104,6 +107,7 @@ export default function(options: VitePluginToadOptions): Plugin {
       options,
    )
 
+   const logger = createLogger('warn', { prefix: '[toad]' })
    const styleRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    const ssrTransformCallbacks = new Map<string, () => void>()
 
@@ -420,8 +424,11 @@ export default function(options: VitePluginToadOptions): Plugin {
                      }
                      target = typeof result == 'string' ? result : result.code
                   }
-               } catch (e) {
-                  config.logger.error('[toad] Failed to transform using custom transformer')
+               } catch (error) {
+                  logger.error(
+                     `${colors.red(`Failed to transform ${url} using custom transformer`)}`,
+                     { timestamp: true, error },
+                  )
                }
             }
 

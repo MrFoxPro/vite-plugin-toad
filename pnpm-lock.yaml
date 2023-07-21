@@ -11,9 +11,9 @@ importers:
       javascript-stringify:
         specifier: ^2.1.0
         version: 2.1.0
-      outdent:
-        specifier: ^0.8.0
-        version: 0.8.0
+      picocolors:
+        specifier: ^1.0.0
+        version: 1.0.0
       vite:
         specifier: ^4
         version: 4.4.4(sass@1.63.6)
@@ -3624,10 +3624,6 @@ packages:
       prelude-ls: 1.2.1
       type-check: 0.4.0
     dev: true
-
-  /outdent@0.8.0:
-    resolution: {integrity: sha512-KiOAIsdpUTcAXuykya5fnVVT+/5uS0Q1mrkRHcF89tpieSmY33O/tmc54CqwA+bfhbtEfZUNLHaPUiB9X3jt1A==}
-    dev: false
 
   /p-limit@3.1.0:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
