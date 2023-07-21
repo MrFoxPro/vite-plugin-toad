@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 
-import type { ConfigEnv, FilterPattern, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
+import type { ConfigEnv, FilterPattern, ModuleNode, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
 import { createFilter, createLogger, createServer } from 'vite'
 import { stringify } from 'javascript-stringify'
 // @ts-ignore
@@ -192,7 +192,7 @@ export default function(options: VitePluginToadOptions): Plugin {
       sourceId: string
       sourceCode: string
       fakeId: string
-
+      deps: string[]
       // output?: string // filled at runtime
 
       style?: Style // filled at runtime
@@ -300,6 +300,7 @@ export default function(options: VitePluginToadOptions): Plugin {
                sourceId: id,
                fakeId: getModuleVirtualId(id),
                sourceCode: code,
+               deps: [],
                style: {
                   id: baseId + (output.ext ?? options.outputExtension),
                },
@@ -312,6 +313,18 @@ export default function(options: VitePluginToadOptions): Plugin {
                if (prevFakeModuke) {
                   server.moduleGraph.invalidateModule(prevFakeModuke)
                }
+               const res = await server.transformRequest(fakeModuleId, { ssr: true })
+               for (const dep of res.deps) {
+                  const resolved = await this.resolve(dep, id)
+                  if (!resolved) {
+                     continue
+                  }
+                  const modInfo = this.getModuleInfo(resolved.id)
+                  if (modInfo && !modInfo.id.includes('node_modules')) {
+                     file.deps.push(modInfo.id)
+                  }
+               }
+
                const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
                ssrTransformCallbacks.get(baseId)?.()
                ssrTransformCallbacks.delete(baseId)
@@ -350,27 +363,38 @@ export default function(options: VitePluginToadOptions): Plugin {
       // Idk but it works fine without
       // fuck Vite tbh, undocumented + dead discord community
       handleHotUpdate(ctx) {
-         const mods = []
+         const mods = new Set<ModuleNode>()
          const entries = Object.values(files)
-         for (const mod of ctx.modules) {
-            console.log(mod.id, Array.from(mod.importers).map(x => x.id))
-            const target = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
-            if (target) {
-               logger.info(`${colors.blue(`Found target to include in as dependency in HMR: ${target.id}`)}`, {
+
+         const importer = entries.find(e => e.deps?.includes(ctx.file))
+         if (importer) {
+            const importerModuleId = server.moduleGraph.getModuleById(importer.sourceId)
+            if (importerModuleId) {
+               mods.add(importerModuleId)
+            }
+         }
+
+         const targetMods = server.moduleGraph.getModulesByFile(ctx.file)
+         const toCheck = ctx.modules.concat(Array.from(targetMods))
+
+         for (const mod of toCheck) {
+            const importers = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
+            if (importers) {
+               logger.info(`${colors.blue(`Found target to include in as dependency in HMR: ${importers.id}`)}`, {
                   timestamp: true,
                })
                logger.info(`${colors.blue(`${mod.id}`)}`, { timestamp: true })
-               mods.push(target)
+               mods.add(importers)
             }
             const related = files[getModuleVirtualId(getBaseId(mod.id))]
             if (!related) {
                continue
             }
             const toadMod = server.moduleGraph.getModuleById(related.sourceId)
-            mods.push(toadMod)
+            mods.add(toadMod)
          }
-         console.log(mods.map(m => m.id))
-         return mods
+         const _mods = Array.from(mods)
+         return _mods
       },
    }
    const ssr: Plugin = {
