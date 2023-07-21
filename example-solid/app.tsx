@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { modularScale, hiDPI } from 'polished';
 import { css } from '../src/css';
-import Constants from './constants';
+import Constants from '#constants.ts';
 import logo from './logo.svg';
 
 css`/*global*/ /* mark style as global */

@@ -5,7 +5,7 @@
          "name": "Debug Solid example (dev)",
          "request": "launch",
          "cwd": "${workspaceFolder}/example-solid",
-         "runtimeArgs": ["dev"],
+         "runtimeArgs": ["dev", "--force"],
          "runtimeExecutable": "pnpm",
          // "skipFiles": ["<node_internals>/**"],
          "type": "node",

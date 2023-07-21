@@ -6,6 +6,9 @@
       "build": "vite build",
       "preview": "vite preview"
    },
+   "imports": {
+      "#*": "./*"
+   },
    "devDependencies": {
       "@mdx-js/rollup": "^2.3.0",
       "@vite-plugin-universal/example-solid": "link:/home/foxpro/craft/vite-plugin-universal/example.solid",

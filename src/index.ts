@@ -194,7 +194,6 @@ export default function(options: VitePluginToadOptions): Plugin {
       fakeId: string
 
       // output?: string // filled at runtime
-      deps?: string[]
 
       style?: Style // filled at runtime
       entries?: StyleEntry[] // filled at runtime
@@ -301,7 +300,6 @@ export default function(options: VitePluginToadOptions): Plugin {
                sourceId: id,
                fakeId: getModuleVirtualId(id),
                sourceCode: code,
-               deps: [],
                style: {
                   id: baseId + (output.ext ?? options.outputExtension),
                },
@@ -314,21 +312,7 @@ export default function(options: VitePluginToadOptions): Plugin {
                if (prevFakeModuke) {
                   server.moduleGraph.invalidateModule(prevFakeModuke)
                }
-               // First transformRequest and only then ssrLoadModule! Order does matter
-               const res = await server.transformRequest(fakeModuleId, { ssr: true })
-               for (const dep of res.deps) {
-                  const resolved = await this.resolve(dep, id)
-                  if (!resolved) {
-                     continue
-                  }
-                  const modInfo = this.getModuleInfo(resolved.id)
-                  if (modInfo && !modInfo.id.includes('node_modules')) {
-                     file.deps.push(modInfo.id)
-                  }
-               }
-
                const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
-
                ssrTransformCallbacks.get(baseId)?.()
                ssrTransformCallbacks.delete(baseId)
                output.entries = ssrModule[TODAD_IDENTIFIER].entries as ParsedOutput['entries']
@@ -367,11 +351,11 @@ export default function(options: VitePluginToadOptions): Plugin {
       // fuck Vite tbh, undocumented + dead discord community
       handleHotUpdate(ctx) {
          const mods = []
+         const entries = Object.values(files)
          for (const mod of ctx.modules) {
-            // if(mod.importers.)
-            const file = Object.values(files).find(file => file.deps.includes(mod.id))
-            if(file) {
-               mods.push(server.moduleGraph.getModuleById(file.sourceId))
+            const target = Array.from(mod.importers).find(m => entries.some(e=> e.sourceId === m.id))
+            if(target) {
+               mods.push(target)
             }
             const related = files[getModuleVirtualId(getBaseId(mod.id))]
             if (!related) {

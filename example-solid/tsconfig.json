@@ -7,8 +7,6 @@
       "declaration": true,
       "emitDeclarationOnly": true,
       "allowImportingTsExtensions": true,
-      "resolvePackageJsonImports": true,
-      "resolvePackageJsonExports": true,
       "jsxImportSource": "solid-js",
       "jsx": "preserve",
       "types": ["vite/client"]
