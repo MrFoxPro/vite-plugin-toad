@@ -1,7 +1,7 @@
 import * as path from 'node:path'
 
-import type { FilterPattern, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
-import { createFilter, createLogger, createServer, normalizePath } from 'vite'
+import type { ConfigEnv, FilterPattern, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
+import { createFilter, createLogger, createServer } from 'vite'
 import { stringify } from 'javascript-stringify'
 // @ts-ignore
 import colors from 'picocolors'
@@ -90,7 +90,7 @@ async function makeStyleDefault(entries: StyleEntry[]) {
    return source
 }
 
-const VIRTUAL_MODULE_PREFIX = '@toad/'
+const VIRTUAL_MODULE_PREFIX = '/@toad/'
 const WS_EVENT_PREFIX = '@toad:hmr'
 const TODAD_IDENTIFIER = '__TOAD__'
 const QS_FULL_SKIP = 'toad-full-skip'
@@ -116,6 +116,7 @@ export default function(options: VitePluginToadOptions): Plugin {
    let root: string
    let createStyle: typeof makeStyleDefault
    let lastServedTime = Date.now()
+   let env: ConfigEnv
 
    const filter = createFilter(options.include, options.exclude)
    const rootRel = (p: string) => path.relative(root, p)
@@ -212,7 +213,7 @@ export default function(options: VitePluginToadOptions): Plugin {
       name: 'toad:main',
       enforce: 'pre',
       config(_config, _env) {
-         // env = _env
+         env = _env
       },
       configResolved(_config) {
          config = _config
@@ -227,24 +228,6 @@ export default function(options: VitePluginToadOptions): Plugin {
             }
          })
       },
-      async load(url, opts) {
-         const [id, qs] = url.split('?')
-         if (!isVirtual(id) || qs?.includes(QS_FULL_SKIP)) {
-            return
-         }
-
-         const file = files[getBaseId(id)]
-         if (!file || id !== file.style.id) {
-            return
-         }
-
-         if (!file.style?.sheet) {
-            // Return empty because we didn't process with ssrLoadModule yet
-            return ''
-         }
-         lastServedTime = Date.now()
-         return file.style.sheet
-      },
       resolveId(url) {
          const [id, qs] = url.split('?')
          if (qs?.includes(QS_FULL_SKIP)) {
@@ -254,16 +237,46 @@ export default function(options: VitePluginToadOptions): Plugin {
             return id
          }
       },
+      load: {
+         order: 'pre',
+         async handler(url, opts) {
+            const [id, qs] = url.split('?')
+            if (!isVirtual(id) || qs?.includes(QS_FULL_SKIP)) {
+               return
+            }
+
+            const file = files[getBaseId(id)]
+            if (!file || id !== file.style.id) {
+               return
+            }
+
+            if (!file.style?.sheet) {
+               // Return empty because we didn't process with ssrLoadModule yet
+               return ''
+            }
+            lastServedTime = Date.now()
+            return file.style.sheet
+         },
+      },
+
       async buildStart(options) {
          if (!server) {
+            logger.info(
+               `${colors.blue(`Starting dev server for SSR`)}`,
+               { timestamp: true },
+            )
             server = await createServer({
-               // @ts-ignore Ensure we will not listen server
+               configFile: false,
                mode: 'production',
+               logLevel: 'silent',
                server: {
                   middlewareMode: true,
                },
+               // @ts-ignore
+               plugins: config.plugins
             })
          }
+         return
       },
       transform: {
          order: 'pre',
@@ -434,6 +447,9 @@ export default function(options: VitePluginToadOptions): Plugin {
 
             return target
          },
+      },
+      buildEnd(error) {
+         return server.close()
       },
    }
 
