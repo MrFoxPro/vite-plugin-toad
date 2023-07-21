@@ -17,12 +17,12 @@ const App = () => (
    <div
       class={css`
         /*@toad-debug wrapper*/ // <- this adds "wrapper" to output class
-        max-width: 800px;
-        background-color: #dadada;
-        font-size: ${modularScale(2)};
-        ${hiDPI(1.5)} {
-          font-size: ${modularScale(2.5)};
-        }
+         max-width: 600px;
+         background-color: #dadada;
+         font-size: ${modularScale(2)};
+         ${hiDPI(1.5)} {
+            font-size: ${modularScale(2.5)};
+         }
       `}
    >
       <img

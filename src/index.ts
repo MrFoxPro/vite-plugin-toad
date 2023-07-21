@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 
-import type { Plugin, ResolvedConfig, FilterPattern, ViteDevServer, Update, ConfigEnv, Rollup } from 'vite'
+import type { ConfigEnv, FilterPattern, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
 import { createFilter, createServer, normalizePath } from 'vite'
 import { stringify } from 'javascript-stringify'
 
@@ -48,32 +48,52 @@ export type VitePluginToadOptions = {
                ssr?: boolean
             },
          ]
-      ): {
-         result: Rollup.TransformResult
-         cb?: () => void 
-      } | Promise<{
-         result: Rollup.TransformResult
-         cb?: () => void 
-      }>
-       /**
+      ):
+         | {
+            result: Rollup.TransformResult
+            cb?: () => void
+         }
+         | Promise<{
+            result: Rollup.TransformResult
+            cb?: () => void
+         }>
+      /**
        * If Vite was unable to load SSR module, you can try this.
-       * 
        */
       processWithSWC?: boolean
    }
    /**
     * Transform or process style of each module
     */
-   transformStyle?(server: ViteDevServer, collectedSource: string): string | Promise<string>
+   createStyleMaker?(server: ViteDevServer): typeof makeStyleDefault
 }
-const VIRTUAL_MODULE_PREFIX = '/@toad/virtual'
+
+type StyleEntry = {
+   classId: string
+   src: string
+   isGlobal: boolean
+}
+
+async function makeStyleDefault(entries: StyleEntry[]) {
+   let source = ''
+   for (const { classId, src, isGlobal } of entries) {
+      source += '\n'
+      if (isGlobal) {
+         source += `\n${src}\n`
+         continue
+      }
+      source += `.${classId} { ${src} }\n`
+   }
+   return source
+}
+
+const VIRTUAL_MODULE_PREFIX = '/@toad/'
 const WS_EVENT_PREFIX = '@toad:hmr'
 const TODAD_IDENTIFIER = '__TOAD__'
-const QS_SSR = 'toad-ssr'
 const QS_FULL_SKIP = 'toad-full-skip'
 const STYLE_HASH_LEN = 5
 
-export default function (options: VitePluginToadOptions): Plugin {
+export default function(options: VitePluginToadOptions): Plugin {
    options = Object.assign(
       {
          include: [/\.(t|j)sx?/],
@@ -82,9 +102,8 @@ export default function (options: VitePluginToadOptions): Plugin {
          outputExtension: '.css',
          eval: false,
       },
-      options
+      options,
    )
-
 
    const jsRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    const ssrTransformCallbacks = new Map<string, () => void>()
@@ -92,90 +111,31 @@ export default function (options: VitePluginToadOptions): Plugin {
    let config: ResolvedConfig
    let server: ViteDevServer
    let root: string
-   let env: ConfigEnv
-
+   let createStyle: typeof makeStyleDefault
    let lastServedTime = Date.now()
 
-   type VirtualModuleData = {
-      hash: string
-      src: string
-      ownerId: string
-      deps: string[]
-      ext?: string
-   }
-   const state: {
-      [id: string]: VirtualModuleData
-   } = {}
-
    const filter = createFilter(options.include, options.exclude)
-   const rootAbs = (p: string) => path.resolve(root, p)
    const rootRel = (p: string) => path.relative(root, p)
-   const comparePaths = (p1: string, p2: string) => {
-      p1 = path.normalize(p1)
-      p2 = path.normalize(p2)
-      if (!path.isAbsolute(p1)) p1 = rootAbs(p1)
-      if (!path.isAbsolute(p2)) p2 = rootAbs(p2)
-      return p1 === p2
-   }
-   const prettifyPath = (p: string) => {
-      if (path.isAbsolute(p)) p = rootRel(p)
-      return '/' + normalizePath(p)
-   }
+
    function createHash(data, len) {
       return slugify(data).slice(len)
-   }
-   // const jsxRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
-
-   // class ToadVisitor extends Visitor {
-   //    visitModule(m: swc.Module): swc.Module {
-   //       return super.visitModule(m)
-   //    }
-   //    visitIdentifier(node) {
-   //       return node
-   //    }
-
-   //    visitTsType(node) {
-   //       return node
-   //    }
-   // }
-
-   function getToadModuleId(modId: string, ext = options.outputExtension) {
-      ext ??= options.outputExtension
-      return path.posix.join(VIRTUAL_MODULE_PREFIX, modId.replace(path.extname(modId), ext))
-   }
-
-   function sendHmrUpdate(ids: string[]) {
-      server.ws.send({
-         type: 'update',
-         updates: ids
-            .map(id => {
-               const vMod = server.moduleGraph.getModuleById(id)
-               if (!vMod) return null
-               return <Update>{
-                  type: 'js-update',
-                  path: vMod.id ?? vMod.file,
-                  acceptedPath: vMod.id ?? vMod.file,
-                  timestamp: lastServedTime,
-               }
-            })
-            .filter(Boolean),
-      })
    }
 
    function toValidCSSIdentifier(s: string) {
       return s.replace(/[^-_a-z0-9\u00A0-\uFFFF]/gi, '_').replace(/^\d/, '_')
    }
 
-   type StyleEntry = {
-      classId: string
-      src: string
-      isGlobal: boolean
+   type ParsedOutput = {
+      replaced: string
+      ext: string
+      entries: StyleEntry[]
    }
-   function processModule(id: string, code: string) {
+
+   async function parseModule(id: string, code: string): Promise<ParsedOutput> {
       const entries: StyleEntry[] = []
       const relId = rootRel(id)
       const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
-      const transformed = code.replaceAll(jsRegex, (substring, tag, _src) => {
+      const replaced = code.replaceAll(jsRegex, (substring, tag, _src) => {
          const src = _src.trim() as string
 
          const filename = relId.replace(path.extname(relId), '')
@@ -184,244 +144,287 @@ export default function (options: VitePluginToadOptions): Plugin {
 
          const parts: string[] = [filename]
 
-         if (isGlobal) parts.push('global')
-         if (debugName) parts.push(debugName)
+         if (isGlobal) {
+            parts.push('global')
+         }
+         if (debugName) {
+            parts.push(debugName)
+         }
 
          parts.push(createHash(src, 3))
          const classId = toValidCSSIdentifier(parts.join('-'))
          entries.push({ classId, src, isGlobal })
          return isGlobal ? '' : `"${classId}"`
       })
-      return [transformed, entries, ext] as const
+      return { replaced, entries, ext }
    }
-   function createHMRScript(id: string, hash: string) {
-      return `
-         if (import.meta.hot) {
-            try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${id}", "${hash}"]); }
-            catch (e) { console.warn('${WS_EVENT_PREFIX}', e) }
-            if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 100))
-         }
-      `
+
+   function sendHmrUpdate(ids: string[]) {
+      server.ws.send({
+         type: 'update',
+         updates: ids
+            .map(id => {
+               const mod = server.moduleGraph.getModuleById(id)
+               if (!mod) {
+                  return null
+               }
+               return <Update> {
+                  type: 'js-update',
+                  path: mod.id ?? mod.file,
+                  acceptedPath: mod.id ?? mod.file,
+                  timestamp: lastServedTime,
+               }
+            })
+            .filter(Boolean),
+      })
    }
+
+   type Style = {
+      id?: string
+      sheet?: string
+      hash: string
+   }
+   type File = {
+      sourceId: string
+      sourceCode: string
+      fakeId?: string
+
+      // output?: string // filled at runtime
+      deps?: string[]
+
+      style?: Style // filled at runtime
+      entries?: StyleEntry[] // filled at runtime
+   }
+   const getModuleFakeId = (baseId: string) => path.posix.join(VIRTUAL_MODULE_PREFIX, baseId)
+   const getBaseId = (id: string) => {
+      const extLess = id.slice(0, id.lastIndexOf('.'))
+      return extLess
+   }
+   const isVirtual = (id: string) => id.startsWith(VIRTUAL_MODULE_PREFIX)
+
+   // module id without extension : descriptor
+   const files: Record<string, File> = {}
 
    const main: Plugin = {
       name: 'toad:main',
       enforce: 'pre',
       config(_config, _env) {
-         env = _env
+         // env = _env
       },
       configResolved(_config) {
          config = _config
          root = config.root
+         createStyle = options.createStyleMaker?.(server) ?? makeStyleDefault
       },
       configureServer(_server) {
          server = _server
          server.ws.on(WS_EVENT_PREFIX, ([id, hash]: string[]) => {
-            if (state[id]?.hash !== hash) sendHmrUpdate(Object.keys(state))
+            if (files[id]?.style?.hash !== hash) {
+               sendHmrUpdate(Object.keys(files))
+            }
          })
+      },
+      async load(url, opts) {
+         const [id, qs] = url.split('?')
+         if (!id.startsWith(VIRTUAL_MODULE_PREFIX) || qs?.includes(QS_FULL_SKIP)) {
+            return
+         }
+         const file = files[getBaseId(id)]
+         if (!file?.style?.sheet) {
+            return '' // Return empty because we didn't process with ssrLoadModule yet
+         }
+         lastServedTime = Date.now()
+         return file.style.sheet
       },
       resolveId(id) {
          if (id.startsWith(VIRTUAL_MODULE_PREFIX)) {
             return id
          }
       },
-      load(url) {
-         const [id, qs] = url.split('?')
-         if (qs?.includes(QS_FULL_SKIP)) return
-         if (!id.startsWith(VIRTUAL_MODULE_PREFIX)) return
-         const source = state[id]
-         if (!source) {
-            if (qs?.includes(QS_SSR)) return ''
-            config.logger.error(`[toad] Failed to resolve ${url}`)
-            return
-         }
-         lastServedTime = Date.now()
-         return source.src
-      },
       async buildStart(options) {
-         if (server) return
-         server = await createServer({
-            // @ts-ignore Ensure we will not listen server
-            mode: 'production',
-            server: {
-               middlewareMode: true,
-            },
-         })
+         if (!server) {
+            server = await createServer({
+               // @ts-ignore Ensure we will not listen server
+               mode: 'production',
+               server: {
+                  middlewareMode: true,
+               },
+            })
+         }
       },
-      async transform(code, url, opts) {
-         const [id, qs] = url.split('?')
-         if (!filter(id) || qs?.includes(QS_SSR)) return
+      transform: {
+         // order: 'post',
+         async handler(code, url, opts) {
+            const [id, qs] = url.split('?')
+            if (!filter(id) || isVirtual(id)) {
+               return
+            }
 
-         const [processedCode, entries, ext] = processModule(id, code)
-         if (entries.length == 0) return code
+            // We need to parse it here anyway and in SSR too
+            // I didn't find the way to parse it only once
+            // Impossible to use output from SSR as code is different
+            // And I don't know if I can split parseModule without `replaceAll`
+            const output = await parseModule(id, code)
 
-         const vModId = getToadModuleId(id, ext)
+            if (!output.entries.length) {
+               return
+            }
 
-         const vMod = server.moduleGraph.getModuleById(vModId)
-         if (vMod) {
-            server.moduleGraph.invalidateModule(vMod)
-            vMod.lastHMRTimestamp = vMod.lastInvalidationTimestamp || Date.now()
-         }
+            const baseId = getModuleFakeId(getBaseId(id))
+            const file: File = {
+               sourceId: id,
+               sourceCode: code,
+               deps: [],
+            }
+            files[baseId] = file
 
-         let result: string = `
-import "${vModId}"
-${processedCode}
-         `
-         if (!opts?.ssr && code.includes('import.meta.hot')) {
-            const vMod = Object.values(state).find(entry => entry.ownerId === id)
-            if (vMod) result += createHMRScript(id, vMod.hash)
-         }
+            if (options.ssr?.eval) {
+               const fakeModuleId = getModuleFakeId(id)
+               const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
+               ssrTransformCallbacks.get(id)?.()
+               ssrTransformCallbacks.delete(id)
 
-         state[vModId] = {
-            src: '',
-            hash: null,
-            ownerId: id,
-            deps: [],
-         }
-
-         async function createStyle(vModId: string, entries: StyleEntry[]) {
-            for (const { classId, src, isGlobal } of entries) {
-               state[vModId].src += '\n'
-               if (isGlobal) {
-                  state[vModId].src += `\n${src}\n`
-                  continue
+               const res = await server.ssrTransform(code, null, id)
+               for (const dep of res.deps) {
+                  const resolved = await this.resolve(dep, id)
+                  if (!resolved) {
+                     continue
+                  }
+                  const modInfo = this.getModuleInfo(resolved.id)
+                  if (modInfo && !modInfo.id.includes('node_modules')) {
+                     file.deps.push(modInfo.id)
+                  }
                }
-               state[vModId].src += `.${classId} {
-                  ${src}
-               }\n`
+               output.entries = ssrModule[TODAD_IDENTIFIER].entries as ParsedOutput['entries']
             }
-            state[vModId].hash = createHash(state[vModId].src, STYLE_HASH_LEN)
-         }
 
-         if (!options.ssr?.eval) {
-            await createStyle(vModId, entries)
+            const sheet = await createStyle(output.entries)
+            const hash = createHash(sheet, STYLE_HASH_LEN)
+            file.style = {
+               sheet,
+               hash,
+               id: getBaseId(id) + output.ext,
+            }
+
+            let result: string = `
+               import "${file.style.id}"
+               ${output.replaced}
+            `
+
+            if (!opts?.ssr && code.includes('import.meta.hot')) {
+               result += `
+               if (import.meta.hot) {
+                  try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${id}", "${file.style.hash}"]); }
+                  catch (e) { console.warn('${WS_EVENT_PREFIX}', e) }
+                  if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 100))
+               }
+            `
+            }
+
+            const sMod = server.moduleGraph.getModuleById(file.style.id)
+            if (sMod) {
+               server.moduleGraph.invalidateModule(sMod)
+               sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
+            }
             return result
-         }
-         const mod = await server.ssrLoadModule(id + '?' + QS_SSR, { fixStacktrace: true })
-         ssrTransformCallbacks.get(id)?.()
-         ssrTransformCallbacks.delete(id)
-         const evaluatedEntries = mod[TODAD_IDENTIFIER] as StyleEntry[]
-         await createStyle(vModId, evaluatedEntries)
-
-         const res = await server.ssrTransform(code, null, id)
-         for (const dep of res.deps) {
-            const resolved = await this.resolve(dep, id)
-            if (!resolved) continue
-            const modInfo = this.getModuleInfo(resolved.id)
-            if (modInfo && !modInfo.id.includes('node_modules')) {
-               state[vModId].deps.push(modInfo.id)
-            }
-         }
-         return result
-         // return null
-         // const result = await swc.parse(code, {
-         //    syntax: 'typescript',
-         //    target: 'esnext',
-         //    tsx: true,
-         // })
-         // const visitor = new ToadVisitor()
-         // const reverted = await swc.print(result, {
-         //    plugin: m => visitor.visitProgram(m),
-         // })
+         },
       },
       buildEnd() {
          return server.close()
       },
-      // Idk but it works fine without this bullshit
-      // fuck Vite tbh
-      // undocumented + dead discord community
+      // Idk but it works fine without
+      // fuck Vite tbh, undocumented + dead discord community
       handleHotUpdate(ctx) {
-         const mods = ctx.modules.filter(mod => !mod.id.includes(QS_SSR))
+         const mods = ctx.modules
          for (const mod of mods) {
-            server.moduleGraph.invalidateModule(mod)
-
-            // const related = Object.entries(state).find(([id, { ownerId }]) => ownerId === mod.id)
-            // if (!related) continue
-            // const toadMod = server.moduleGraph.getModuleById(related[0])
-            // if (toadMod) {
-            //    server.moduleGraph.invalidateModule(toadMod)
-            // }
+            // server.moduleGraph.invalidateModule(mod)
+            const related = files[mod.id]
+            if (!related) {
+               continue
+            }
+            const toadMod = server.moduleGraph.getModuleById(related[0])
+            if (toadMod) {
+               server.moduleGraph.invalidateModule(toadMod)
+               console.log('invalidated', toadMod.id)
+            }
          }
+         console.log(mods)
          return mods
       },
    }
-
-   const preSsr: Plugin = {
+   const ssr: Plugin = {
       name: 'toad:ssr',
       enforce: 'pre',
-      transform: {
-         order: 'pre',
-         handler(code, url, opts) {
+      load: {
+         handler(url, options) {
             const [id, qs] = url.split('?')
-            if (!filter(id)) return
-            if(!qs?.includes(QS_FULL_SKIP) && !qs?.includes(QS_SSR)) return
+            if (!filter(id) || !isVirtual(id)) {
+               return
+            }
+            const file = files[getBaseId(id)]
+            if (!file) {
+               console.warn('unable to find fake SSR module for', id)
+               return
+            }
+            return file.sourceCode
+         },
+      },
+      transform: {
+         async handler(code, url, opts) {
+            const [id, qs] = url.split('?')
+            if (!filter(id) || qs?.includes(QS_FULL_SKIP) || !opts?.ssr) {
+               return
+            }
 
-            const [processedCode, entries, ext] = processModule(id, code)
-            const jsEntries = stringify(entries, (value, space, next, key) => {
+            let transformed: string = isVirtual(id) ? 
+
+            if (options.ssr?.customSSRTransformer) {
+               customTransform:
+               try {
+                  const { result, cb } = await options.ssr.customSSRTransformer(code, this, server, code, url, opts)
+                  if (!result) {
+                     config.logger.warn('[toad] customSSRTransformer did not return a value')
+                     break customTransform
+                  }
+                  ssrTransformCallbacks.set(id, cb)
+                  transformed = typeof result == 'string' ? result : result.code
+               } catch (e) {
+                  config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
+               }
+            }
+
+            transformed ??= code
+            if (!isVirtual(id)) {
+               return transformed
+            }
+
+            const file = files[getBaseId(id)]
+            if (!file) {
+               return transformed
+            }
+
+            const { entries } = await parseModule(file.sourceId, transformed)
+            const jsified = stringify({ entries }, (value, space, next, key) => {
                if (typeof value === 'string') {
                   return `\`${value}\``
                }
                return next(value)
             })
-            return `
-               ${processedCode}
-               export const ${TODAD_IDENTIFIER} = ${jsEntries}
-            `
-         },
-      },
-   }
-   const ssr: Plugin = {
-      name: 'toad:ssr-middleware',
-      enforce: 'pre',
-      transform: {
-         async handler(code, url, opts) {
-            const [id, qs] = url.split('?')
-            if (!filter(id)) return
-            if (qs?.includes(QS_FULL_SKIP)) return
-            if (!opts?.ssr) return
-
-            let moduleCode = code
-            if (options.ssr?.customSSRTransformer) {
-               try {
-                  const { result, cb } = await options.ssr.customSSRTransformer(code, this, server, code, url, opts)
-                  if (result) {
-                     ssrTransformCallbacks.set(id, cb)
-                     moduleCode = typeof result == 'string' ? result : result.code
-                  } else config.logger.warn('[toad] customSSRTransformer did not return a value')
-               } catch (e) {
-                  config.logger.error('[toad] Failed to transform using custom transformer', { error: e })
-               }
-            }
-            return moduleCode
+            transformed += '\n' + `export const ${TODAD_IDENTIFIER} = ${jsified}`
+            return transformed
          },
       },
    }
 
-   const styles: Plugin = {
-      name: 'toad:styles',
-      async transform(code, url, opts) {
-         const [id, qs] = url.split('?')
-         if (qs?.includes(QS_SSR)) return
-         if (!id.startsWith(VIRTUAL_MODULE_PREFIX) || qs?.includes(QS_FULL_SKIP)) return
-         const mod = state[id]
-         if (!mod) {
-            config.logger.warn(`[toad:styles]: Unable to find cached module ${id}`)
-            return
-         }
-         const result = await options.transformStyle!(server, mod.src)
-         mod.src = result
-         mod.hash = createHash(mod.src, STYLE_HASH_LEN)
-         return mod.src
-      },
-   }
    const plugins = [main]
-   if (options.transformStyle) plugins.push(styles)
-   if (options.ssr?.customSSRTransformer) plugins.push(preSsr, ssr)
+   if (options.ssr?.customSSRTransformer) {
+      plugins.push(ssr)
+   }
 
    return Object.assign(plugins, { name: 'toad' })
 }
 
 export function skipToadForUrl(url: string) {
-   let qs =  url.includes('?') ? '&' : '?'
+   let qs = url.includes('?') ? '&' : '?'
    return url + qs + QS_FULL_SKIP
 }

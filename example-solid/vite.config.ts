@@ -16,6 +16,9 @@ export default async ({ mode }: ConfigEnv) => {
       solid: {
          generate: 'dom',
       },
+      typescript: {
+         onlyRemoveTypeImports: true
+      }
    }
 
    const config: UserConfig = {
