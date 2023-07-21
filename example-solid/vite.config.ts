@@ -4,6 +4,7 @@ import type { Options as SolidOptions } from 'vite-plugin-solid'
 import ViteSolid from 'vite-plugin-solid'
 import VitePluginInspect from 'vite-plugin-inspect'
 import type { ConfigEnv, UserConfig } from 'vite'
+import ViteSolidSVG from 'vite-plugin-solid-svg'
 
 import ViteToad, { skipToadForUrl } from '../src/index'
 
@@ -33,6 +34,9 @@ export default async ({ mode }: ConfigEnv) => {
       },
       plugins: [
          ViteSolid(solidOptions),
+         ViteSolidSVG({
+            defaultAsComponent: true
+         }),
          ViteToad({
             // outputExtension: '.scss',
             tag: 'css',

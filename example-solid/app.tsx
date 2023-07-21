@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { modularScale, hiDPI } from 'polished';
 import { css } from '../src/css';
 import Constants from './dep1.ts';
-import logo from './logo.svg';
+import LogoIcon from '#logo.svg';
 
 css`/*global*/ /* mark style as global */
    body {background-color: ${Constants.BACKGROUND_COLOR};} /* Use some static variables. Works when 'ssr.evaluate = true' */
@@ -24,8 +24,7 @@ const App = () => (
          }
       `}
    >
-      <img
-         src={logo}
+      <LogoIcon
          class={css`
           animation: logo-spin infinite 10s linear;
           height: 30vmin;
