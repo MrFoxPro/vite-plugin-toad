@@ -60,10 +60,6 @@ export type VitePluginToadOptions = {
             result: Rollup.TransformResult
             cb?: () => void
          }>
-      /**
-       * If Vite was unable to load SSR module, you can try this.
-       */
-      processWithSWC?: boolean
    }
    /**
     * Transform or process style of each module
