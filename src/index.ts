@@ -345,10 +345,12 @@ export default function(options: VitePluginToadOptions): Plugin {
       // Idk but it works fine without
       // fuck Vite tbh, undocumented + dead discord community
       handleHotUpdate(ctx) {
+         if(!filter(ctx.file)) return
+
          const mods = new Set<ModuleNode>()
          const entries = Object.values(files)
          const targetMods = server.moduleGraph.getModulesByFile(ctx.file)
-         const toCheck = ctx.modules.concat(Array.from(targetMods))
+         const toCheck = ctx.modules.concat(Array.from(targetMods ?? []))
 
          for (const mod of toCheck) {
             const importers = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
