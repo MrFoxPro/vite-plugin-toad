@@ -1,5 +1,4 @@
 import * as path from 'node:path'
-
 import type { ConfigEnv, FilterPattern, ModuleNode, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
 import { createFilter, createLogger, createServer } from 'vite'
 import { stringify } from 'javascript-stringify'
@@ -321,7 +320,7 @@ export default function(options: VitePluginToadOptions): Plugin {
                ${output.replaced}
             `
 
-            if (!opts?.ssr) {
+            if (env.command === 'serve' && !opts?.ssr) {
                result += `
                if (import.meta.hot) {
                   try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${baseId}", "${file.style.hash}"]); }
@@ -384,9 +383,7 @@ export default function(options: VitePluginToadOptions): Plugin {
             logger.error("can't find file " + id)
             return
          }
-         // const res = path.resolve(path.dirname(file.sourceId), url)
          const res = await this.resolve(url, file.sourceId, options)
-         // console.log('resolved', url, importer, res)
          return res
       },
       load: {
