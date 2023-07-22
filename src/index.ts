@@ -1,9 +1,10 @@
 import * as path from 'node:path'
+
 import type { ConfigEnv, FilterPattern, ModuleNode, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
 import { createFilter, createLogger, createServer } from 'vite'
-import { stringify } from 'javascript-stringify'
 // @ts-ignore
 import colors from 'picocolors'
+import { stringify } from 'javascript-stringify'
 
 import { slugify } from './slugify.ts'
 
@@ -345,13 +346,17 @@ export default function(options: VitePluginToadOptions): Plugin {
       // Idk but it works fine without
       // fuck Vite tbh, undocumented + dead discord community
       handleHotUpdate(ctx) {
-         if(!filter(ctx.file)) return
+         if (!filter(ctx.file)) {
+            return
+         }
 
          const mods = new Set<ModuleNode>()
          const entries = Object.values(files)
          const targetMods = server.moduleGraph.getModulesByFile(ctx.file)
          const toCheck = ctx.modules.concat(Array.from(targetMods ?? []))
-
+         if (!toCheck.length) {
+            return
+         }
          for (const mod of toCheck) {
             const importers = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
             if (importers) {
@@ -369,6 +374,7 @@ export default function(options: VitePluginToadOptions): Plugin {
             mods.add(toadMod)
          }
          const _mods = Array.from(mods)
+         if(!_mods.length) return
          return _mods
       },
    }
