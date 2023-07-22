@@ -119,3 +119,6 @@ Currently, it may not work if styles are co-located with some legacy dependencie
 - Make a simple Vite plugin just in your configuration to skip dependency: return empty string in Vite `load()` hook.
 - Play with Vite `ssr.external` configuration.
 It's possible that I will implement some kind of tree-shaking through SWC, so all unused in styling deps will be omitted, as Linaria do with their shaker.
+
+## Typescript
+You can avoid using `import { css } from 'vite-plugin-toad/css` by adding `"vite-plugin-toad/css"` entry to `tsconfig.json` `compilerOptions.types` array.
