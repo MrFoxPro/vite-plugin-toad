@@ -374,7 +374,9 @@ export default function(options: VitePluginToadOptions): Plugin {
             mods.add(toadMod)
          }
          const _mods = Array.from(mods)
-         if(!_mods.length) return
+         if (!_mods.length) {
+            return
+         }
          return _mods
       },
    }
@@ -411,8 +413,20 @@ export default function(options: VitePluginToadOptions): Plugin {
          order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
-            if ((!isVirtual(id) && !filter(id)) || !opts?.ssr) {
+            const isModVirtual = isVirtual(id)
+            if ((!isModVirtual && !filter(id)) || !opts?.ssr) {
                return
+            }
+            const mod = server.moduleGraph.getModuleById(id)
+
+            if (!isModVirtual) {
+               if (!mod?.importers?.size) {
+                  return
+               }
+               const importers = Array.from(mod.importers)
+               if (!importers.some(importer => isVirtual(importer.id))) {
+                  return
+               }
             }
 
             const isThirdLayer = qs?.includes(QS_FULL_SKIP)
