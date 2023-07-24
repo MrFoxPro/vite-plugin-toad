@@ -61,6 +61,8 @@ export type VitePluginToadOptions = {
             cb?: () => void
          }>
    }
+
+   makeClassName?(filename: string, style: string, debugName: string): string
    /**
     * Transform or process style of each module
     */
@@ -131,28 +133,33 @@ export default function(options: VitePluginToadOptions): Plugin {
    // But I can't imagine how
    async function parseModule(id: string, code: string): Promise<ParsedOutput> {
       const entries: StyleEntry[] = []
-      const relId = rootRel(id)
+      const fileBasename = path.basename(rootRel(id))
+      const filename = fileBasename.replace(path.extname(fileBasename), '')
+
       const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
       const replaced = code.replaceAll(styleRegex, (substring, tag, _src) => {
          const src = _src.trim() as string
 
-         const filename = relId.replace(path.extname(relId), '')
          const isGlobal = src.startsWith('/*global*/')
          const debugName = src.match(/\/\*@toad-debug[\s]+(?<debug>.+)\*\//)?.groups?.debug
+         let classId: string
+         if (options.makeClassName) {
+            classId =  options.makeClassName(filename, src, debugName)
+         } else {
+            const parts: string[] = [filename]
 
-         const parts: string[] = [filename]
+            if (isGlobal) {
+               parts.push('global')
+            }
+            if (debugName) {
+               parts.push(debugName)
+            }
 
-         if (isGlobal) {
-            parts.push('global')
+            // to match SSR with common
+            const castrated = src.replaceAll(/\$\{.+\}/gi, '')
+            parts.push(slugify(castrated))
+            classId = toValidCSSIdentifier(parts.join('-'))
          }
-         if (debugName) {
-            parts.push(debugName)
-         }
-
-         // to match SSR with common
-         const castrated = src.replaceAll(/\$\{.+\}/gi, '')
-         parts.push(slugify(castrated))
-         const classId = toValidCSSIdentifier(parts.join('-'))
          entries.push({ classId, src, isGlobal })
          return isGlobal ? '' : `"${classId}"`
       })
