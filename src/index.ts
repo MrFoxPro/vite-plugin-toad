@@ -105,6 +105,13 @@ export default function(options: VitePluginToadOptions): Plugin {
       options,
    )
 
+   if (Array.isArray(options.include)) {
+      options.include.push(new RegExp(VIRTUAL_MODULE_PREFIX))
+   } else {
+      // @ts-ignore
+      options.include = [options.include, new RegExp(VIRTUAL_MODULE_PREFIX)]
+   }
+
    const logger = createLogger('warn', { prefix: '[toad]' })
    const styleRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, 'gm')
    const ssrTransformCallbacks = new Map<string, () => void>()
@@ -144,7 +151,7 @@ export default function(options: VitePluginToadOptions): Plugin {
          const debugName = src.match(/\/\*@toad-debug[\s]+(?<debug>.+)\*\//)?.groups?.debug
          let classId: string
          if (options.makeClassName) {
-            classId =  options.makeClassName(filename, src, debugName)
+            classId = options.makeClassName(filename, src, debugName)
          } else {
             const parts: string[] = [filename]
 
@@ -420,10 +427,8 @@ export default function(options: VitePluginToadOptions): Plugin {
          order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
+            if(!filter(id) || !opts.ssr) return
             const isModVirtual = isVirtual(id)
-            if ((!isModVirtual && !filter(id)) || !opts?.ssr) {
-               return
-            }
             const mod = server.moduleGraph.getModuleById(id)
 
             if (!isModVirtual) {
