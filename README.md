@@ -93,6 +93,8 @@ Some [plugins](https://github.com/solidjs/vite-plugin-solid/pull/105) don't resp
 You can process it in `customSSRTransformer`. Make sure to output SSR-ready code.
 ```ts
 ViteToad({
+   outputExtension: '.scss',
+   exclude: [/node_modules/, /\.s?css/], // better to exclude all styles
    ssr: {
       eval: true,
       async customSSRTransformer(code, ctx, server, _c, url) {
