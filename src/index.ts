@@ -427,7 +427,7 @@ export default function(options: VitePluginToadOptions): Plugin {
          order: 'pre',
          async handler(code, url, opts) {
             const [id, qs] = url.split('?')
-            if(!filter(id) || !opts.ssr) return
+            if(!filter(id) || !opts?.ssr) return
             const isModVirtual = isVirtual(id)
             const mod = server.moduleGraph.getModuleById(id)
 
