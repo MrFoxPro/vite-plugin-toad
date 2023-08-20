@@ -275,13 +275,16 @@ export default function(options: VitePluginToadOptions): Plugin {
             )
             server = await createServer({
                configFile: false,
+               base: config.base,
+               root: config.root,
+               resolve: config.resolve,
                mode: 'production',
                logLevel: 'silent',
                server: {
                   middlewareMode: true,
                },
                // @ts-ignore
-               plugins: config.plugins,
+               plugins: config.plugins.filter(pl => !pl.name.startsWith('vite:')),
             })
          }
          return

@@ -23,7 +23,7 @@
    ],
    "scripts": {
       "build": "rollup -c && tsc",
-      "build:all": "pnpm -F ./ -F ./example.solid build"
+      "build:all": "pnpm -F ./ -F ./example-solid build"
    },
    "keywords": [
       "vite",
