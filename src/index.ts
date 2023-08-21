@@ -363,37 +363,35 @@ export default function(options: VitePluginToadOptions): Plugin {
       // Idk but it works fine without
       // fuck Vite tbh, undocumented + dead discord community
       handleHotUpdate(ctx) {
-         if (!filter(ctx.file)) {
-            return
-         }
+         if (!filter(ctx.file)) { return }
 
-         const mods = new Set<ModuleNode>()
          const entries = Object.values(files)
-         const targetMods = server.moduleGraph.getModulesByFile(ctx.file)
-         const toCheck = new Set(ctx.modules.concat(Array.from(targetMods ?? [])));
-         if (!toCheck.size) {
-            return;
-          }
-         for (const mod of toCheck) {
+         const affected = server.moduleGraph.getModulesByFile(ctx.file)
+         for (const mod of ctx.modules) { affected.add(mod) }
+         if (!affected.size) { return }
+
+         for (const mod of affected) {
             const importers = Array.from(mod.importers).filter(m => entries.some(e => e.sourceId === m.id))
-            if (importers) {
-               logger.info(`${colors.blue(`Found target to include in as dependency in HMR: ${importers.map(i => i.id).join(' ')}`)}`, {
+            if (importers.length) {
+               logger.info(`${colors.blue(`Found targets to include in as dependency in HMR:`)}`, {
                   timestamp: true,
                })
-               logger.info(`${colors.blue(`${mod.id}`)}`, { timestamp: true })
-               for(const importee of importers) {
-                  mods.add(importee);
+               logger.info(`${colors.green(importers.map(imp => imp.id).join(', '))}`, {
+                  timestamp: true,
+               })
+               // add each importer of `mod` that contains css-in-js to HMR
+               for (const importer of importers) {
+                  affected.add(importer)
                }
             }
+            // if there is toad file for this affected module
             const related = files[getModuleVirtualId(getBaseId(mod.id))]
-            if (!related) {
-               continue
+            if (related) {
+               const toadMod = server.moduleGraph.getModuleById(related.sourceId)
+               affected.add(toadMod)
             }
-            const toadMod = server.moduleGraph.getModuleById(related.sourceId)
-            mods.add(toadMod)
          }
-         if(!mods.size) return
-         return Array.from(mods);
+         return Array.from(affected)
       },
    }
    const ssr: Plugin = {
