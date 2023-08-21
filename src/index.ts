@@ -370,18 +370,20 @@ export default function(options: VitePluginToadOptions): Plugin {
          const mods = new Set<ModuleNode>()
          const entries = Object.values(files)
          const targetMods = server.moduleGraph.getModulesByFile(ctx.file)
-         const toCheck = ctx.modules.concat(Array.from(targetMods ?? []))
-         if (!toCheck.length) {
-            return
-         }
+         const toCheck = new Set(ctx.modules.concat(Array.from(targetMods ?? [])));
+         if (!toCheck.size) {
+            return;
+          }
          for (const mod of toCheck) {
-            const importers = Array.from(mod.importers).find(m => entries.some(e => e.sourceId === m.id))
+            const importers = Array.from(mod.importers).filter(m => entries.some(e => e.sourceId === m.id))
             if (importers) {
-               logger.info(`${colors.blue(`Found target to include in as dependency in HMR: ${importers.id}`)}`, {
+               logger.info(`${colors.blue(`Found target to include in as dependency in HMR: ${importers.map(i => i.id).join(' ')}`)}`, {
                   timestamp: true,
                })
                logger.info(`${colors.blue(`${mod.id}`)}`, { timestamp: true })
-               mods.add(importers)
+               for(const importee of importers) {
+                  mods.add(importee);
+               }
             }
             const related = files[getModuleVirtualId(getBaseId(mod.id))]
             if (!related) {
@@ -390,11 +392,8 @@ export default function(options: VitePluginToadOptions): Plugin {
             const toadMod = server.moduleGraph.getModuleById(related.sourceId)
             mods.add(toadMod)
          }
-         const _mods = Array.from(mods)
-         if (!_mods.length) {
-            return
-         }
-         return _mods
+         if(!mods.size) return
+         return Array.from(mods);
       },
    }
    const ssr: Plugin = {
