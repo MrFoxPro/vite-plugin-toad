@@ -66,6 +66,7 @@
    "dependencies": {
       "@babel/plugin-syntax-jsx": "^7.22.5",
       "javascript-stringify": "^2.1.0",
+      "merge-anything": "^5.1.7",
       "picocolors": "^1.0.0"
    }
 }

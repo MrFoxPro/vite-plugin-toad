@@ -4,8 +4,11 @@ import type { ConfigEnv, FilterPattern, Plugin, ResolvedConfig, Rollup, Update, 
 import { createFilter, createLogger, createServer } from "vite"
 // @ts-ignore
 import colors from "picocolors"
+import { mergeAndConcat } from "merge-anything"
 import { stringify } from "javascript-stringify"
+import BabelPresetTypescript from "@babel/preset-typescript"
 import BabelPluginJSX from "@babel/plugin-syntax-jsx"
+import type { TransformOptions } from "@babel/core"
 import { transformAsync } from "@babel/core"
 
 import { slugify } from "./slugify.ts"
@@ -37,11 +40,16 @@ export type VitePluginToadOptions = {
     * Note: this uses babel transform.
     * You can use it separately by importing from `vite-plugin-toad/babel-plugin-css-attribute`
     * For example, you can combine it with `Solid` babel options. It could be slightly faster then.
-    * 
+    *
     * For Typescript compitability, see example in `example-solid/css-attr.d.ts`
     * @default false
     */
    trasnformCssAttribute?: boolean
+
+   /**
+    * Babel options that will be used when `trasnformCssAttribute` is true
+    */
+   babel?: TransformOptions
 
    ssr?: {
       /**
@@ -119,7 +127,8 @@ export default function (options: VitePluginToadOptions): Plugin {
          tag: "css",
          outputExtension: ".css",
          eval: false,
-         trasnformCssAttribute: false
+         trasnformCssAttribute: false,
+         babel: {}
       },
       options
    )
@@ -372,20 +381,24 @@ export default function (options: VitePluginToadOptions): Plugin {
             }
 
             if (options.trasnformCssAttribute) {
-               const { code, map } = await transformAsync(result, {
+               const babelOptions = mergeAndConcat(options.babel, {
                   babelrc: false,
                   configFile: false,
                   root,
                   filename: id,
                   sourceFileName: id,
+                  presets: [],
                   plugins: [
                      [BabelPluginJSX, {}],
-                     [BabelPluginCSSAttribute, {}]
+                     [BabelPluginCSSAttribute, {}],
+                     [BabelPresetTypescript, { onlyRemoveTypeImports: true }]
                   ],
                   sourceMaps: true,
                   // Vite handles sourcemap flattening
                   inputSourceMap: false as any
-               })
+               } satisfies TransformOptions)
+
+               const { code, map } = await transformAsync(result, babelOptions)
                return { code, map }
             }
 

@@ -57,6 +57,48 @@ if (!import.meta.env.SSR) {
 }
 ```
 All CSS transforms are handled by Vite, so it will work with SASS, LightningCSS, PostCSS and other tools.  
+There is also way to write your CSS-in-JS separately by using `babel-plugin-css-attribute`. Here it is an example from my project with UnoCSS, preset attributify and vite-plugin-toad:
+```jsx
+<a
+   m-b-8
+   m-t-16px
+   class="block cursor-pointer text-center c-blue-500"
+   css={css`@container (height < 400px) { margin-bottom: 0; }`}
+>
+   My link
+</a>
+```
+⬇️vite-plguin-toad⬇️
+```jsx
+<a class={"block cursor-pointer text-center c-blue-500 m-b-8 m-t-16px" + "login_page-1okjy9f"}
+>
+   My link
+</a>
+```
+
+To use this feature, set `trasnformCssAttribute: true` or use Babel plugin, example with `vite-plugin-solid`:
+```js
+import ViteSolid from "@foxpro/vite-plugin-solid"
+import BabelPluginCssAttrs from "vite-plugin-toad/babel-plugin-css-attribute"
+
+// ...vite configurations and plugins... 
+ViteSolid({
+   hot: dev,
+   dev: dev,
+   typescript: {
+      onlyRemoveTypeImports: true
+   },
+   babel: {
+      plugins: [[BabelPluginCssAttrs, {}]]
+   }
+})
+```
+> ⚠️ To achieve better better performance, use `babel-plugin-css-attribute` directly if possible, because Toad will use additionally:  
+`@babel/preset-typescript`  
+`@babel/plugin-syntax-jsx`  
+This can slightly affect build performance.  
+You can customize babel options by using `babel` option.
+
 For more advanced documentation, please refer to typescript JSDoc comments.
 
 # Motivation
