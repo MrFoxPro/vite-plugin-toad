@@ -1,15 +1,19 @@
 {
    "compilerOptions": {
-      "baseUrl": "./",
+      "strict": false,
+      "strictFunctionTypes": true,
       "module": "esnext",
       "target": "esnext",
       "moduleResolution": "bundler",
-      "declaration": true,
-      "emitDeclarationOnly": true,
-      "allowImportingTsExtensions": true,
       "jsxImportSource": "solid-js",
       "jsx": "preserve",
-      "types": ["vite/client"]
-   },
-   "exclude": ["node_modules"]
+      
+      "types": [
+         "./css-attr.d.ts",
+         "vite/client",
+      ],
+
+      "skipDefaultLibCheck": false,
+      "skipLibCheck": true,
+   }
 }

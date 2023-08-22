@@ -16,6 +16,14 @@
          "import": "./dist/esm/css.js",
          "require": "./dist/cjs/css.js",
          "types": "./dist/css.d.ts"
+      },
+      "./babel-plugin-css-attribute": {
+         "import": "./dist/esm/babel-plugin-css-attribute.js",
+         "require": "./dist/cjs/babel-plugin-css-attribute.ts",
+         "types": "./dist/babel-plugin-css-attribute.d.ts"
+      },
+      "./css-attr": {
+         "types": "./dist/css-attr.d.ts"
       }
    },
    "files": [
@@ -37,22 +45,26 @@
       "url": "https://github.com/MrFoxPro/vite-plugin-toad/issues"
    },
    "peerDependencies": {
+      "@babel/core": "^7.20.5",
       "vite": "^4"
    },
    "devDependencies": {
       "@babel/preset-typescript": "^7.22.5",
       "@rollup/plugin-babel": "^6.0.3",
-      "@typescript-eslint/eslint-plugin": "^6.1.0",
-      "@typescript-eslint/parser": "^6.1.0",
-      "eslint": "^8.45.0",
-      "eslint-config-prettier": "^8.8.0",
-      "eslint-plugin-import": "^2.27.5",
+      "@types/babel__core": "^7.20.1",
+      "@typescript-eslint/eslint-plugin": "^6.4.1",
+      "@typescript-eslint/parser": "^6.4.1",
+      "eslint": "^8.47.0",
+      "eslint-config-prettier": "^9.0.0",
+      "eslint-plugin-import": "^2.28.1",
       "eslint-plugin-prettier": "^5.0.0",
-      "rollup": "^3.26.3",
+      "prettier": "^3.0.2",
+      "rollup": "^3.28.1",
       "rollup-plugin-delete": "^2.0.0",
       "typescript": "^5.1.6"
    },
    "dependencies": {
+      "@babel/plugin-syntax-jsx": "^7.22.5",
       "javascript-stringify": "^2.1.0",
       "picocolors": "^1.0.0"
    }

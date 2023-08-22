@@ -14,18 +14,18 @@
       "@vite-plugin-universal/example-solid": "link:/home/foxpro/craft/vite-plugin-universal/example.solid",
       "remark-frontmatter": "^4.0.1",
       "remark-mdx-frontmatter": "^3.0.0",
-      "sass": "^1.64.0",
-      "solid-js": "^1.7.8",
+      "sass": "^1.66.1",
+      "solid-js": "^1.7.11",
       "solid-mdx": "^0.0.6",
-      "vite": "^4.4.6",
+      "vite": "^4.4.9",
       "vite-plugin-civet": "^0.2.6",
-      "vite-plugin-inspect": "^0.7.33",
+      "vite-plugin-inspect": "^0.7.38",
       "vite-plugin-solid": "^2.7.0",
       "vite-plugin-solid-svg": "^0.6.4",
       "vite-plugin-universal": "^0.1.8"
    },
    "dependencies": {
-      "@kobalte/core": "^0.9.8",
+      "@kobalte/core": "^0.10.0",
       "polished": "^4.2.2"
    }
 }

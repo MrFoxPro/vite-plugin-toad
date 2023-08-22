@@ -9,17 +9,21 @@
       "module": "ESNext",
       "forceConsistentCasingInFileNames": true,
       "moduleResolution": "Bundler",
-      "allowSyntheticDefaultImports": false,
-      "resolvePackageJsonImports": true,
-      "resolvePackageJsonExports": true,
-      "allowArbitraryExtensions": true,
       "allowImportingTsExtensions": true,
+
       "skipDefaultLibCheck": true,
+
       "experimentalDecorators": true,
       "emitDecoratorMetadata": true,
       "strictFunctionTypes": true,
-      "lib": ["DOM", "ESNext"]
    },
-   "exclude": ["node_modules", "dist", "./examples"],
-   "include": ["src/index.ts", "src/css.ts"]
+   "exclude": [
+      "node_modules",
+      "dist",
+      "./examples"
+   ],
+   "include": [
+      "src/**/*.ts",
+      "example-solid/css-attr.d.ts"
+   ]
 }

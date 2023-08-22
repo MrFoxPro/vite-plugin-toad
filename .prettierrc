@@ -1,0 +1,6 @@
+{
+    "editorconfig": true,
+    "printWidth": 115,
+    "trailingComma": "none",
+    "semi": false
+}

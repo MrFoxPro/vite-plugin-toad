@@ -1,12 +1,12 @@
 import path from 'node:path'
 
+import ViteSolidSVG from 'vite-plugin-solid-svg'
 import type { Options as SolidOptions } from 'vite-plugin-solid'
 import ViteSolid from 'vite-plugin-solid'
 import VitePluginInspect from 'vite-plugin-inspect'
 import type { ConfigEnv, UserConfig } from 'vite'
-import ViteSolidSVG from 'vite-plugin-solid-svg'
 
-import ViteToad, { skipToadForUrl } from '../src/index'
+import ViteToad, { skipToadForUrl } from '../src/plugin'
 
 export default async ({ mode }: ConfigEnv) => {
    const dev = mode === 'development'
@@ -40,6 +40,7 @@ export default async ({ mode }: ConfigEnv) => {
          ViteToad({
             // outputExtension: '.scss',
             tag: 'css',
+            trasnformCssAttribute: true,
             ssr: {
                eval: true,
                async customSSRTransformer(code, ctx, server, _c, url) {
