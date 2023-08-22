@@ -80,7 +80,7 @@ export default ({ types: t }: typeof babel, options: BabelPluginCSSAttributeOpti
                      left = classAttr.value
                   }
                   else {
-                     console.warn("Your", classAttr.name.name, "is malformed")
+                     console.warn("Your", classAttr.name.name, "attribute is malformed")
                      return
                   }
                   left = t.parenthesizedExpression(left)

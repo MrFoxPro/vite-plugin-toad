@@ -47,7 +47,13 @@ function App() {
             `}
          />
          <p
-            class={"a" + "b"}
+            class={
+               "a" +
+               "b" +
+               (function () {
+                  return "hi"
+               })()
+            }
             css={css`
                color: royalblue;
             `}
