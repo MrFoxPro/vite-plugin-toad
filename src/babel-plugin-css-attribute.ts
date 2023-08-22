@@ -37,9 +37,9 @@ export default ({ types }: typeof babel, options: BabelPluginCSSAttributeOptions
 
                   let targetValue: string
 
-                  for (const node of path.node.attributes) {
+                  for (const node of attributes) {
                      // some weird attribute
-                     if (node.type !== "JSXAttribute" || !node.value) continue
+                     if (!node.value) continue
 
                      // attribute has different name
                      if (node.name.name !== options.attribute) continue
