@@ -46,7 +46,12 @@ function App() {
                }
             `}
          />
-         <p>
+         <p
+            class={"a" + "b"}
+            css={css`
+               color: royalblue;
+            `}
+         >
             Edit <code>app.tsx</code> and save to reload
          </p>
          <a href="https://github.com/solidjs/solid" target="_blank" css={"fadsf"}>

@@ -4,26 +4,27 @@ type BabelPluginCSSAttributeOptions = {
    attribute?: string
 }
 
-export default ({ types }: typeof babel, options: BabelPluginCSSAttributeOptions) => {
+export default ({ types: t }: typeof babel, options: BabelPluginCSSAttributeOptions) => {
    options = Object.assign(
       {
          attribute: "css"
       },
       options
    )
+
    return {
       visitor: {
          JSXElement(path, state) {
             path.traverse({
                JSXOpeningElement(path, state) {
-                  const attributes = path.node.attributes.filter(
-                     (x) => x.type === "JSXAttribute"
+                  const attributes = path.node.attributes.filter((attr) =>
+                     t.isJSXAttribute(attr)
                   ) as babel.types.JSXAttribute[]
                   const classAttr = attributes.find((attr) => attr.name.name === "class")
                   if (
                      classAttr &&
-                     classAttr.value?.type !== "JSXExpressionContainer" &&
-                     classAttr.value?.type !== "StringLiteral"
+                     !t.isJSXExpressionContainer(classAttr.value) &&
+                     !t.isStringLiteral(classAttr.value)
                   ) {
                      console.warn(
                         "Unsupported `class` attribute type",
@@ -44,11 +45,11 @@ export default ({ types }: typeof babel, options: BabelPluginCSSAttributeOptions
                      // attribute has different name
                      if (node.name.name !== options.attribute) continue
 
-                     if (node.value.type === "StringLiteral") {
+                     if (t.isStringLiteral(node.value)) {
                         targetValue = node.value.value
                      } else if (
-                        node.value.type === "JSXExpressionContainer" &&
-                        node.value.expression.type === "StringLiteral"
+                        t.isJSXExpressionContainer(node.value) &&
+                        t.isStringLiteral(node.value.expression)
                      ) {
                         targetValue = node.value.expression.value
                      }
@@ -62,18 +63,29 @@ export default ({ types }: typeof babel, options: BabelPluginCSSAttributeOptions
                   if (!targetValue) return
 
                   if (!classAttr) {
-                     const newAttr = types.jsxAttribute(
-                        types.jsxIdentifier("class"),
-                        types.stringLiteral(targetValue)
-                     )
+                     const newAttr = t.jsxAttribute(t.jsxIdentifier("class"), t.stringLiteral(targetValue))
                      path.node.attributes.push(newAttr)
                      return
                   }
 
-                  const left = classAttr.value
-                  const right = types.stringLiteral(" " + targetValue)
-                  // @ts-ignore
-                  const newExpression = types.jsxExpressionContainer(types.binaryExpression("+", left, right))
+                  let left: babel.types.Expression
+
+                  if (t.isJSXExpressionContainer(classAttr.value)) {
+                     if (t.isJSXEmptyExpression(classAttr.value.expression)) {
+                        console.warn("Your", classAttr.name.name, "is malformed")
+                        return
+                     }
+                     left = classAttr.value.expression
+                  } else if (t.isStringLiteral(classAttr.value)) {
+                     left = classAttr.value
+                  }
+                  else {
+                     console.warn("Your", classAttr.name.name, "is malformed")
+                     return
+                  }
+                  left = t.parenthesizedExpression(left)
+                  const right = t.stringLiteral(" " + targetValue)
+                  const newExpression = t.jsxExpressionContainer(t.binaryExpression("+", left, right))
                   classAttr.value = newExpression
                }
             })
