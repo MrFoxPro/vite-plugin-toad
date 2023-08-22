@@ -44,10 +44,10 @@ export type VitePluginToadOptions = {
     * For Typescript compitability, see example in `example-solid/css-attr.d.ts`
     * @default false
     */
-   trasnformCssAttribute?: boolean
+   transformCssAttribute?: boolean
 
    /**
-    * Babel options that will be used when `trasnformCssAttribute` is true
+    * Babel options that will be used when `transformCssAttribute` is true
     */
    babel?: TransformOptions
 
@@ -127,7 +127,7 @@ export default function (options: VitePluginToadOptions): Plugin {
          tag: "css",
          outputExtension: ".css",
          eval: false,
-         trasnformCssAttribute: false,
+         transformCssAttribute: false,
          babel: {}
       },
       options
@@ -380,24 +380,22 @@ export default function (options: VitePluginToadOptions): Plugin {
                sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
             }
 
-            if (options.trasnformCssAttribute) {
+            if (options.transformCssAttribute) {
                const babelOptions = mergeAndConcat(options.babel, {
                   babelrc: false,
                   configFile: false,
                   root,
                   filename: id,
                   sourceFileName: id,
-                  presets: [],
+                  presets: [[BabelPresetTypescript, { onlyRemoveTypeImports: true }]],
                   plugins: [
                      [BabelPluginJSX, {}],
                      [BabelPluginCSSAttribute, {}],
-                     [BabelPresetTypescript, { onlyRemoveTypeImports: true }]
                   ],
                   sourceMaps: true,
                   // Vite handles sourcemap flattening
                   inputSourceMap: false as any
                } satisfies TransformOptions)
-
                const { code, map } = await transformAsync(result, babelOptions)
                return { code, map }
             }

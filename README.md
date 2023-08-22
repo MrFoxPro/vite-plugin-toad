@@ -76,7 +76,7 @@ There is also way to write your CSS-in-JS separately by using `babel-plugin-css-
 </a>
 ```
 
-To use this feature, set `trasnformCssAttribute: true` or use Babel plugin, example with `vite-plugin-solid`:
+To use this feature, set `transformCssAttribute: true` or use Babel plugin, example with `vite-plugin-solid`:
 ```js
 import ViteSolid from "@foxpro/vite-plugin-solid"
 import BabelPluginCssAttrs from "vite-plugin-toad/babel-plugin-css-attribute"

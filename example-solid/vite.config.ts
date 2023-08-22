@@ -40,7 +40,7 @@ export default async ({ mode }: ConfigEnv) => {
          ViteToad({
             // outputExtension: '.scss',
             tag: 'css',
-            trasnformCssAttribute: true,
+            transformCssAttribute: true,
             ssr: {
                eval: true,
                async customSSRTransformer(code, ctx, server, _c, url) {
