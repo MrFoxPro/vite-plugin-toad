@@ -22,6 +22,8 @@
       "vite-plugin-inspect": "^0.7.38",
       "vite-plugin-solid": "^2.7.0",
       "vite-plugin-solid-svg": "^0.6.4",
+      "vite-plugin-svg-jsx": "^0.1.1",
+      "vite-plugin-toad": "link:..",
       "vite-plugin-universal": "^0.1.8"
    },
    "dependencies": {

@@ -5,7 +5,12 @@ import del from "rollup-plugin-delete"
 const output = {}
 /** @type {import('rollup').RollupOptions} */
 export default {
-   input: ["./src/index.ts", "./src/slugify.ts", "./src/babel-plugin-css-attribute.ts", "./src/css.ts"],
+   input: [
+      "./src/index.ts",
+      "./src/slugify.ts",
+      "./src/babel-plugin-css-attribute.ts",
+      "./src/css.ts",
+   ],
    external: ["vite", "node:path", "node:fs/promises"],
    treeshake: "smallest",
    output: [
@@ -25,7 +30,7 @@ export default {
          extensions: [".ts"],
          babelHelpers: "bundled",
          presets: ["@babel/preset-typescript"],
-         exclude: /node_modules\//,
+         exclude: /node_modules\//
       }),
       del({ targets: "dist/*" })
    ]

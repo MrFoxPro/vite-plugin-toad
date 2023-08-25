@@ -1,96 +1,82 @@
-import path from 'node:path'
+import path from "node:path"
 
-import ViteSolidSVG from 'vite-plugin-solid-svg'
-import type { Options as SolidOptions } from 'vite-plugin-solid'
-import ViteSolid from 'vite-plugin-solid'
-import VitePluginInspect from 'vite-plugin-inspect'
-import type { ConfigEnv, UserConfig } from 'vite'
+import ViteSvgJsx from 'vite-plugin-svg-jsx'
+import ViteSolidSVG from "vite-plugin-solid-svg"
+import type { Options as SolidOptions } from "vite-plugin-solid"
+import ViteSolid from "vite-plugin-solid"
+import VitePluginInspect from "vite-plugin-inspect"
+import type { ConfigEnv, UserConfig } from "vite"
 
-import ViteToad, { skipToadForUrl } from '../src/plugin'
+import ViteToad from "../src/plugin"
 
 export default async ({ mode }: ConfigEnv) => {
-   const dev = mode === 'development'
-
-   const solidOptions: Partial<SolidOptions> = {
-      hot: dev,
-      dev: dev,
-      solid: {
-         generate: 'dom',
-      },
-      typescript: {
-         onlyRemoveTypeImports: true,
-      },
-   }
+   const dev = mode === "development"
 
    const config: UserConfig = {
-      base: '/',
+      base: "/",
       clearScreen: false,
-      logLevel: 'info',
+      logLevel: "info",
       server: {
-         port: 3000,
+         port: 3000
       },
       preview: {
-         port: 3000,
+         port: 3000
       },
       plugins: [
-         ViteSolid(solidOptions),
-         ViteSolidSVG({
-            defaultAsComponent: true
+         ViteSolid({
+            hot: dev,
+            dev: dev,
+            solid: {
+               generate: "dom"
+            },
+            // include: [/(\.svg)|(.(t|j)sx?)/],
          }),
+         ViteSolidSVG({
+            defaultAsComponent: true,
+         }),
+         // ViteSvgJsx(),
          ViteToad({
             // outputExtension: '.scss',
-            tag: 'css',
+            tag: "css",
             transformCssAttribute: true,
+            // include: [],
             ssr: {
                eval: true,
-               async customSSRTransformer(code, ctx, server, _c, url) {
-                  solidOptions.solid.generate = 'ssr'
-                  const solidPlugin = server.config.plugins.find(p => p.name === 'solid')
-                  const result = await solidPlugin.transform(code, skipToadForUrl(url), { ssr: true })
-                  // or
-                  // const result = await server.transformRequest(skipToadForUrl(url), { ssr: true })
-                  return {
-                     result,
-                     // this will be called when we will transform all dependencies
-                     cb: () => {
-                        solidOptions.solid.generate = 'dom'
-                     },
-                  }
-               },
-            },
+               babelOptions: { presets: [["solid", { generate: "ssr", hydratable: false }]] },
+            }
          }),
          VitePluginInspect({
-            silent: true,
-         }),
+            silent: true
+         })
       ],
       css: {
-         modules: false,
+         modules: false
       },
       build: {
-         outDir: './dist',
-         target: 'esnext',
+         outDir: "./dist",
+         target: "esnext",
          emptyOutDir: true,
          cssCodeSplit: true,
          modulePreload: {
-            polyfill: false,
+            polyfill: false
          },
          minify: false,
          rollupOptions: {
             output: {
                entryFileNames: `[name].js`,
                chunkFileNames: `assets/[name].js`,
-               assetFileNames: `assets/[name].[ext]`,
-            },
-         },
+               assetFileNames: `assets/[name].[ext]`
+            }
+         }
       },
       resolve: {
          alias: [
             {
-               find: '@',
-               replacement: path.resolve(__dirname, './'),
-            },
-         ],
-      },
+               find: "@",
+               replacement: path.resolve(__dirname, "./")
+            }
+         ]
+      }
    }
    return config
 }

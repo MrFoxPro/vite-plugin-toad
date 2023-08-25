@@ -1,204 +1,69 @@
-import * as path from "node:path"
+import * as Path from "node:path"
+import fs from "node:fs/promises"
 
-import type { ConfigEnv, FilterPattern, Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from "vite"
-import { createFilter, createLogger, createServer } from "vite"
+import type { ConfigEnv, ModuleNode, Plugin, ResolvedConfig, Update, ViteDevServer } from "vite"
+import { createFilter, createLogger, createServer, transformWithEsbuild } from "vite"
 // @ts-ignore
 import colors from "picocolors"
 import { mergeAndConcat } from "merge-anything"
 import { stringify } from "javascript-stringify"
-import BabelPresetTypescript from "@babel/preset-typescript"
-import BabelPluginJSX from "@babel/plugin-syntax-jsx"
-import type { TransformOptions } from "@babel/core"
-import { transformAsync } from "@babel/core"
+import * as t from "@babel/types"
+import generate from "@babel/generator"
+import * as babel from "@babel/core"
 
 import { slugify } from "./slugify.ts"
-import BabelPluginCSSAttribute from "./babel-plugin-css-attribute.ts"
-
-export type VitePluginToadOptions = {
-   include?: FilterPattern
-   exclude?: FilterPattern
-   /**
-    * Output extension.
-    * @default 'css'
-    */
-   outputExtension?: string
-   /**
-    * Tag name to replace.
-    * Use `createToadSelector` with this option.
-    * @default 'css'
-    */
-   tag?: string
-
-   /**
-    * This enables transformation of `css`.
-    * ```
-    * css={css`
-    *    color: red;
-    *  `}
-    * ```
-    * will be merged to `class` tag.
-    * Note: this uses babel transform.
-    * You can use it separately by importing from `vite-plugin-toad/babel-plugin-css-attribute`
-    * For example, you can combine it with `Solid` babel options. It could be slightly faster then.
-    *
-    * For Typescript compitability, see example in `example-solid/css-attr.d.ts`
-    * @default false
-    */
-   transformCssAttribute?: boolean
-
-   /**
-    * Babel options that will be used when `transformCssAttribute` is true
-    */
-   babel?: TransformOptions
-
-   ssr?: {
-      /**
-       * Load module to evaluate emplate strings
-       * @default false
-       */
-      eval?: boolean
-
-      /**
-       * Some plugins don't respect vite `ssr: true` parameter, and they need to be processed separately
-       *
-       * You can process them in this callback. Make sure to output SSR-ready code
-       *
-       * See also: https://github.com/solidjs/vite-plugin-solid/pull/105
-       */
-      customSSRTransformer?(
-         processedCode: string,
-         ctx: Rollup.PluginContext,
-         server: ViteDevServer,
-         // IDK how to infer this cringy Vite type
-         ...viteOptions: [
-            originalCode: string,
-            id: string,
-            options?: {
-               ssr?: boolean
-            }
-         ]
-      ):
-         | {
-              result: Rollup.TransformResult
-              cb?: () => void
-           }
-         | Promise<{
-              result: Rollup.TransformResult
-              cb?: () => void
-           }>
-   }
-
-   makeClassName?(filename: string, style: string, debugName: string): string
-   /**
-    * Transform or process style of each module
-    */
-   createStyleMaker?(server: ViteDevServer): typeof makeStyleDefault
-}
-
-type StyleEntry = {
-   classId: string
-   src: string
-   isGlobal: boolean
-}
-
-async function makeStyleDefault(entries: StyleEntry[]) {
-   let source = ""
-   for (const { classId, src, isGlobal } of entries) {
-      source += "\n"
-      if (isGlobal) {
-         source += `\n${src}\n`
-         continue
-      }
-      source += `.${classId} { ${src} }\n`
-   }
-   return source
-}
-
-const VIRTUAL_MODULE_PREFIX = "/@toad/"
-const WS_EVENT_PREFIX = "@toad:hmr"
-const TODAD_IDENTIFIER = "__TOAD__"
-const QS_FULL_SKIP = "toad-full-skip"
-
+import type { VitePluginToadOptions } from "./options.ts"
 export default function (options: VitePluginToadOptions): Plugin {
-   options = Object.assign(
+   options = mergeAndConcat(
       {
          include: [/\.(t|j)sx?/],
          exclude: [/node_modules/],
          tag: "css",
          outputExtension: ".css",
-         eval: false,
-         transformCssAttribute: false,
-         babel: {}
-      },
+         ssr: {
+            eval: false,
+            babelOptions: {},
+            forceEsbuildOnDependencies: []
+         },
+         customAttribute: {
+            enable: false,
+            name: "css"
+         }
+      } satisfies VitePluginToadOptions,
       options
    )
 
+   const VIRTUAL_MODULE_PREFIX = "/@toad/module/"
+   const VIRTUAL_STYLE_PREFIX = "/@toad/style/"
+   const WS_EVENT_PREFIX = "@toad:hmr"
+   const TODAD_IDENTIFIER = "__TOAD__"
+   const QS_FULL_SKIP = "toad-full-skip"
+
    if (Array.isArray(options.include)) {
       options.include.push(new RegExp(VIRTUAL_MODULE_PREFIX))
-   } else {
+   } else if (options.include) {
       // @ts-ignore
       options.include = [options.include, new RegExp(VIRTUAL_MODULE_PREFIX)]
    }
+   const filter = createFilter(options.include, options.exclude)
 
-   const logger = createLogger("warn", { prefix: "[toad]" })
-   const styleRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, "gm")
-   const ssrTransformCallbacks = new Map<string, () => void>()
+   const logger = createLogger("warn", {
+      prefix: "[toad]"
+   })
 
    let config: ResolvedConfig
    let server: ViteDevServer
-   let root: string
-   let createStyle: typeof makeStyleDefault
    let lastServedTime = Date.now()
    let env: ConfigEnv
-
-   const filter = createFilter(options.include, options.exclude)
-   const rootRel = (p: string) => path.relative(root, p)
 
    function toValidCSSIdentifier(s: string) {
       return s.replace(/[^-_a-z0-9\u00A0-\uFFFF]/gi, "_").replace(/^\d/, "_")
    }
 
-   type ParsedOutput = {
-      replaced: string
-      ext: string
-      entries: StyleEntry[]
-   }
-
-   // It may be splitted for performance
-   // But I can't imagine how
-   async function parseModule(id: string, code: string): Promise<ParsedOutput> {
-      const entries: StyleEntry[] = []
-      const fileBasename = path.basename(rootRel(id))
-      const filename = fileBasename.replace(path.extname(fileBasename), "")
-
-      const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
-      const replaced = code.replaceAll(styleRegex, (substring, tag, _src) => {
-         const src = _src.trim() as string
-
-         const isGlobal = src.startsWith("/*global*/")
-         const debugName = src.match(/\/\*@toad-debug[\s]+(?<debug>.+)\*\//)?.groups?.debug
-         let classId: string
-         if (options.makeClassName) {
-            classId = options.makeClassName(filename, src, debugName)
-         } else {
-            const parts: string[] = [filename]
-
-            if (isGlobal) {
-               parts.push("global")
-            }
-            if (debugName) {
-               parts.push(debugName)
-            }
-
-            // to match SSR with common
-            const castrated = src.replaceAll(/\$\{.+\}/gi, "")
-            parts.push(slugify(castrated))
-            classId = toValidCSSIdentifier(parts.join("-"))
-         }
-         entries.push({ classId, src, isGlobal })
-         return isGlobal ? "" : `"${classId}"`
-      })
-      return { replaced, entries, ext }
+   // to match SSR template with non-SSR template
+   function getIndependentStyleHash(style: string) {
+      const castrated = style.replaceAll(/\$\{.+\}/gi, "")
+      return slugify(castrated)
    }
 
    function sendHmrUpdate(ids: string[]) {
@@ -221,29 +86,98 @@ export default function (options: VitePluginToadOptions): Plugin {
       })
    }
 
-   type Style = {
-      id: string
-      sheet?: string
-      hash?: string
-   }
-   type File = {
-      sourceId: string
-      sourceCode: string
-      fakeId: string
-      // output?: string // filled at runtime
+   const createStyle =
+      options.createStyle ??
+      function createStyle(className: string, template: string, isGlobal: boolean) {
+         if (isGlobal) {
+            return `${template}\n`
+         }
+         return `.${className} { ${template} }\n`
+      }
 
-      style?: Style // filled at runtime
-      entries?: StyleEntry[] // filled at runtime
-   }
-   const getModuleVirtualId = (baseId: string) => path.posix.join(VIRTUAL_MODULE_PREFIX, baseId)
+   const createClassName =
+      options.createClassName ??
+      function createClassName(ctx: { filename: string; isGlobal: boolean; debugName: string; hash: string }) {
+         const parts = [ctx.filename]
+         if (ctx.isGlobal) {
+            parts.push("global")
+         }
+         if (ctx.debugName) {
+            parts.push(ctx.debugName)
+         }
+         parts.push(ctx.hash)
+         const className = toValidCSSIdentifier(parts.join("-"))
+         return className
+      }
+
    const getBaseId = (id: string) => {
       const extLess = id.slice(0, id.lastIndexOf("."))
       return extLess
    }
-   const isVirtual = (id: string) => id.startsWith(VIRTUAL_MODULE_PREFIX)
 
+   const isVirtualId = (id: string) => id.startsWith("/@toad/")
+
+   const isVirtualModuleId = (id: string) => id.startsWith(VIRTUAL_MODULE_PREFIX)
+   const getModuleVirtualId = (baseId: string) => Path.posix.join(VIRTUAL_MODULE_PREFIX, baseId)
+   const getModuleRealId = (virtualId: string) => virtualId.replace(VIRTUAL_MODULE_PREFIX, "/")
+
+   const getStyleVirtualID = (id: string) => Path.posix.join(VIRTUAL_STYLE_PREFIX, id)
+   const isVirtualStyleId = (id: string) => id.startsWith(VIRTUAL_STYLE_PREFIX)
+
+   type Target = {
+      realModuleId: string
+      vModuleId: string
+      vStyleId?: string
+      style: {
+         sheet: string
+         hash: string
+      } // filled at runtime
+   }
    // module id without extension : descriptor
-   const files: Record<string, File> = {}
+   const targets: Target[] = []
+
+   const findTargetByVirtualModuleId = (vModId: string) => targets.find((x) => x.vModuleId === vModId)
+   const findTargetByVirtualStyleId = (vStyleId: string) => targets.find((x) => x.vStyleId === vStyleId)
+   const findTargetByRealModuleId = (modId: string) => targets.find((x) => x.realModuleId === modId)
+
+   async function transformModuleGenerateStyles(id: string, code: string) {
+      const filename = Path.basename(id)
+      const ast = await babel.parseAsync(code, { filename, parserOpts: { plugins: ["jsx", "typescript"] } })
+      const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
+      const output = {
+         ext,
+         styles: [] as string[],
+         ast
+      }
+      babel.traverse(ast, {
+         TaggedTemplateExpression(path, state) {
+            const node = path.node
+            if (node.tag.type !== "Identifier") return
+            if (node.tag.name !== options.customAttribute.name) return
+
+            // remove ` from start and end
+            const template = code.slice(node.quasi.start + 1, node.quasi.end - 1)
+
+            const isGlobal = /[\s]*\/\*global\*\//.test(template)
+            const debugName = template.match(/\/\*@toad-debug[\s]+(?<debug>.+)\*\//)?.groups?.debug
+
+            const hash = getIndependentStyleHash(template)
+            const className = createClassName({
+               debugName,
+               isGlobal,
+               hash,
+               filename: filename.replace(Path.extname(filename), "")
+            })
+            const style = createStyle(className, template, isGlobal)
+
+            path.replaceWith(t.stringLiteral(className))
+
+            output.styles.push(style)
+         }
+      })
+
+      return output
+   }
 
    const main: Plugin = {
       name: "toad:main",
@@ -253,14 +187,13 @@ export default function (options: VitePluginToadOptions): Plugin {
       },
       configResolved(_config) {
          config = _config
-         root = config.root
-         createStyle = options.createStyleMaker?.(server) ?? makeStyleDefault
       },
       configureServer(_server) {
          server = _server
          server.ws.on(WS_EVENT_PREFIX, ([id, hash]: string[]) => {
-            if (files[id]?.style?.hash !== hash) {
-               sendHmrUpdate(Object.keys(files))
+            const target = findTargetByVirtualModuleId(id)
+            if (target?.style?.hash !== hash) {
+               sendHmrUpdate(targets.map((x) => x.realModuleId))
             }
          })
       },
@@ -269,7 +202,7 @@ export default function (options: VitePluginToadOptions): Plugin {
          if (qs?.includes(QS_FULL_SKIP)) {
             return
          }
-         if (isVirtual(id)) {
+         if (isVirtualId(id)) {
             return id
          }
       },
@@ -277,21 +210,21 @@ export default function (options: VitePluginToadOptions): Plugin {
          order: "pre",
          async handler(url, opts) {
             const [id, qs] = url.split("?")
-            if (!isVirtual(id) || qs?.includes(QS_FULL_SKIP)) {
+            if (!isVirtualStyleId(id)) {
                return
             }
 
-            const file = files[getBaseId(id)]
-            if (!file || id !== file.style.id) {
+            const target = findTargetByVirtualStyleId(id)
+            if (!target) {
                return
             }
 
-            if (!file.style?.sheet) {
+            if (!target.style?.sheet) {
                // Return empty because we didn't process with ssrLoadModule yet
                return ""
             }
             lastServedTime = Date.now()
-            return file.style.sheet
+            return target.style.sheet
          }
       },
 
@@ -318,112 +251,101 @@ export default function (options: VitePluginToadOptions): Plugin {
          order: "pre",
          async handler(code, url, opts) {
             const [id, qs] = url.split("?")
-            if (!filter(id) || isVirtual(id) || qs?.includes(QS_FULL_SKIP)) {
+            if (!filter(id) || isVirtualId(id) || qs?.includes(QS_FULL_SKIP)) {
                return
             }
 
-            // We need to parse it here anyway and in SSR too
-            // I didn't find the way to parse it only once
-            // Impossible to use output from SSR as code is different
-            // And I don't know if I can split parseModule without `replaceAll`
-            const output = await parseModule(id, code)
+            let output: Awaited<ReturnType<typeof transformModuleGenerateStyles>>
 
-            if (!output.entries.length) {
-               return
-            }
-
-            const baseId = getModuleVirtualId(getBaseId(id))
-            const file: File = {
-               sourceId: id,
-               fakeId: getModuleVirtualId(id),
-               sourceCode: code,
-               style: {
-                  id: baseId + (output.ext ?? options.outputExtension)
-               }
-            }
-            files[baseId] = file
-
-            const fakeModuleId = getModuleVirtualId(id)
+            const vModId = getModuleVirtualId(id)
             if (options.ssr?.eval) {
-               const prevFakeModuke = server.moduleGraph.getModuleById(fakeModuleId)
+               const prevFakeModuke = server.moduleGraph.getModuleById(vModId)
                if (prevFakeModuke) {
                   server.moduleGraph.invalidateModule(prevFakeModuke)
                }
-
-               const ssrModule = await server.ssrLoadModule(fakeModuleId, { fixStacktrace: true })
-               ssrTransformCallbacks.get(baseId)?.()
-               ssrTransformCallbacks.delete(baseId)
-               output.entries = ssrModule[TODAD_IDENTIFIER].entries as ParsedOutput["entries"]
-            }
-            file.style.sheet = await createStyle(output.entries)
-            file.style.hash = slugify(file.style.sheet)
-
-            let result: string = `
-               import "${file.style.id}"
-               ${output.replaced}
-            `
-
-            if (env.command === "serve" && !opts?.ssr) {
-               result += `
-               if (import.meta.hot) {
-                  try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${baseId}", "${file.style.hash}"]); }
-                  catch (e) { console.warn('${WS_EVENT_PREFIX}', e) }
-                  if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 300))
+               const ssrModule = await server.ssrLoadModule(vModId, { fixStacktrace: true }).catch((_) => _)
+               if (ssrModule instanceof Error) {
+                  logger.error(
+                     "There was an error when evaluating module in SSR mode." +
+                        "\nMake sure you specified needed SSR configuration via `ssr.babelOptions` and `ssr.forceEsbuildOnDependencies` plugin options\n" +
+                        ssrModule.toString(),
+                     { error: ssrModule }
+                  )
+                  return
                }
-            `
+               output = ssrModule[TODAD_IDENTIFIER].output
+            } else {
+               output = await transformModuleGenerateStyles(id, code)
             }
+
+            if (!output.styles.length) {
+               return
+            }
+
+            const sheet = output.styles.join("\n")
+
+            let target: Target
+            const tIndex = targets.findIndex((t) => t.realModuleId === id)
+            const vStyleId = getStyleVirtualID(getBaseId(id) + (output.ext ?? options.outputExtension))
+            if (tIndex === -1) {
+               target = {
+                  realModuleId: id,
+                  vModuleId: getModuleVirtualId(id),
+                  vStyleId: vStyleId,
+                  style: {
+                     sheet,
+                     hash: slugify(sheet)
+                  }
+               }
+               targets.push(target)
+            } else {
+               target = targets[tIndex]
+               target.vStyleId = vStyleId
+               target.style.sheet = sheet
+               target.style.hash = slugify(sheet)
+            }
+
+            // @ts-ignore
+            output.ast.program.body.unshift(t.importDeclaration([], t.stringLiteral(target.vStyleId)))
 
             // After updating styles, need to refetch them
-            const sMod = server.moduleGraph.getModuleById(file.style.id)
+            const sMod = server.moduleGraph.getModuleById(target.vStyleId)
             if (sMod) {
                server.moduleGraph.invalidateModule(sMod)
                sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
             }
 
-            if (options.transformCssAttribute) {
-               const babelOptions = mergeAndConcat(options.babel, {
-                  babelrc: false,
-                  configFile: false,
-                  root,
-                  filename: id,
-                  sourceFileName: id,
-                  presets: [[BabelPresetTypescript, { onlyRemoveTypeImports: true }]],
-                  plugins: [
-                     [BabelPluginJSX, {}],
-                     [BabelPluginCSSAttribute, {}],
-                  ],
-                  sourceMaps: true,
-                  // Vite handles sourcemap flattening
-                  inputSourceMap: false as any
-               } satisfies TransformOptions)
-               const { code, map } = await transformAsync(result, babelOptions)
-               return { code, map }
+            const result = generate(output.ast, { sourceFileName: Path.basename(id) }, code)
+            if (env.command === "serve" && !opts?.ssr) {
+               result.code += `
+if (import.meta.hot) {
+   try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${vModId}", "${target.style.hash}"]) }
+   catch(e) { console.warn('${WS_EVENT_PREFIX}', e) }
+   if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 300))
+}`
             }
-
             return result
          }
       },
       buildEnd() {
          return server.close()
       },
-      // Idk but it works fine without
-      // fuck Vite tbh, undocumented + dead discord community
+
       handleHotUpdate(ctx) {
          if (!filter(ctx.file)) {
             return
          }
-
-         const entries = Object.values(files)
-         const affected = server.moduleGraph.getModulesByFile(ctx.file)
+         const affected = server.moduleGraph.getModulesByFile(ctx.file) ?? new Set<ModuleNode>()
          for (const mod of ctx.modules) {
             affected.add(mod)
          }
+
          if (!affected.size) {
             return
          }
 
          for (const mod of affected) {
-            const importers = Array.from(mod.importers).filter((m) => entries.some((e) => e.sourceId === m.id))
+            const importers = Array.from(mod.importers).filter((m) => targets.some((e) => e.realModuleId === m.id))
             if (importers.length) {
                logger.info(`${colors.blue(`Found targets to include in as dependency in HMR:`)}`, {
                   timestamp: true
@@ -437,41 +359,48 @@ export default function (options: VitePluginToadOptions): Plugin {
                }
             }
             // if there is toad file for this affected module
-            const related = files[getModuleVirtualId(getBaseId(mod.id))]
+            const related = findTargetByRealModuleId(mod.id)
             if (related) {
-               const toadMod = server.moduleGraph.getModuleById(related.sourceId)
-               affected.add(toadMod)
+               const toadMod = server.moduleGraph.getModuleById(related.realModuleId)
+               if (toadMod) affected.add(toadMod)
             }
          }
          return Array.from(affected)
       }
    }
+
+   let dependencies: Set<string>
+   const ssrDepsFilter = createFilter(options.ssr.forceEsbuildOnDependencies)
    const ssr: Plugin = {
       name: "toad:ssr",
-      enforce: "pre",
+      enforce: "post",
+      configResolved(config) {
+         dependencies = new Set<string>()
+      },
       async resolveId(url, importer, options) {
-         if (!importer || !isVirtual(importer)) {
-            return
-         }
          const [id, qs] = url.split("?")
-         const file = files[getBaseId(importer)]
-         if (!file) {
-            logger.error("can't find file " + id)
+
+         if (!importer || !isVirtualModuleId(importer)) {
             return
          }
-         const res = await this.resolve(url, file.sourceId, options)
-         return res
+         const res = await this.resolve(url, getModuleRealId(importer), options)
+         if (res) {
+            dependencies.add(res.id)
+         }
+         return res.id
       },
       load: {
-         order: "pre",
-         handler(url, options) {
+         order: "post",
+         async handler(url, opts) {
             const [id, qs] = url.split("?")
-            const file = files[getBaseId(id)]
-            if (!file) {
-               return
+
+            if (isVirtualModuleId(id)) {
+               const realId = getModuleRealId(id)
+               const content = await fs.readFile(realId, { encoding: "utf-8" })
+               return content
             }
-            if (id === file.fakeId) {
-               return file.sourceCode
+            if (isVirtualStyleId(id)) {
+               return ""
             }
          }
       },
@@ -479,67 +408,41 @@ export default function (options: VitePluginToadOptions): Plugin {
          order: "pre",
          async handler(code, url, opts) {
             const [id, qs] = url.split("?")
+            // if (dependencies.has(id) && ssrDepsFilter(url)) {
+            //    return transformWithEsbuild(code, id)
+            // }
+
             if (!filter(id) || !opts?.ssr) {
                return
             }
-            const isModVirtual = isVirtual(id)
+            const isVirtualMod = isVirtualModuleId(id)
             const mod = server.moduleGraph.getModuleById(id)
 
-            if (!isModVirtual) {
+            // If it's not virtual module, we only need to process it in case if it's imported by virtual module
+            if (!isVirtualMod) {
                if (!mod?.importers?.size) {
                   return
                }
                const importers = Array.from(mod.importers)
-               if (!importers.some((importer) => isVirtual(importer.id))) {
+               if (!importers.some((importer) => isVirtualModuleId(importer.id))) {
                   return
                }
             }
 
-            const isThirdLayer = qs?.includes(QS_FULL_SKIP)
-            let target: string = code
-            let entries: StyleEntry[]
+            const output = await transformModuleGenerateStyles(id, code)
 
-            const fileId = isThirdLayer ? getModuleVirtualId(getBaseId(id)) : getBaseId(id)
-            const file = files[fileId]
-
-            if (file) {
-               const result = await parseModule(file.sourceId, target)
-               entries = result.entries
-               target = result.replaced
-               const jsified = stringify({ entries }, (value, space, next, key) => {
-                  if (typeof value === "string") {
-                     return `\`${value}\``
-                  }
-                  return next(value)
-               })
-               target += "\n" + `export const ${TODAD_IDENTIFIER} = ${jsified}`
-            }
-
-            if (!isThirdLayer && options.ssr?.customSSRTransformer) {
-               try {
-                  const { result, cb } = await options.ssr.customSSRTransformer(
-                     target,
-                     this,
-                     server,
-                     target,
-                     id.replace(VIRTUAL_MODULE_PREFIX, "/"),
-                     opts
-                  )
-                  if (result) {
-                     if (file) {
-                        ssrTransformCallbacks.set(getBaseId(id), cb)
-                     }
-                     target = typeof result == "string" ? result : result.code
-                  }
-               } catch (error) {
-                  logger.error(`${colors.red(`Failed to transform ${url} using custom transformer`)}`, {
-                     timestamp: true,
-                     error
-                  })
-               }
-            }
-
-            return target
+            const jsifiedOutput = stringify({ output }, (value, space, next, key) => {
+               if (typeof value === "string") return `\`${value}\``
+               return next(value)
+            })
+            const ssrExport = `export const ${TODAD_IDENTIFIER} = ${jsifiedOutput}`
+            const result = await babel.transformFromAstAsync(output.ast.program, code, {
+               ...options.ssr.babelOptions,
+               sourceFileName: Path.basename(id)
+            })
+            result.code += ssrExport
+            await fs.writeFile("./ssr.js", result.code, { encoding: "utf-8" })
+            return { code: result.code, map: result.map }
          }
       },
       buildEnd(error) {
@@ -553,9 +456,4 @@ export default function (options: VitePluginToadOptions): Plugin {
    }
 
    return Object.assign(plugins, { name: "toad" })
-}
-
-export function skipToadForUrl(url: string) {
-   let qs = url.includes("?") ? "&" : "?"
-   return url + qs + QS_FULL_SKIP
 }

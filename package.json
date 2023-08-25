@@ -1,6 +1,6 @@
 {
-   "type": "module",
    "name": "vite-plugin-toad",
+   "type": "module",
    "version": "0.3.4",
    "description": "Zero runtime CSS-in-JS powered by Vite",
    "main": "./dist/cjs/index.js",
@@ -24,6 +24,10 @@
       },
       "./css-attr": {
          "types": "./dist/css-attr.d.ts"
+      },
+      "./jsx-runtime": {
+         "require": "./dist/cjs/jsx-runtime.js",
+         "import": "./dist/esm/jsx-runtime.js"
       }
    },
    "files": [
@@ -49,9 +53,9 @@
       "vite": "^4"
    },
    "devDependencies": {
-      "@babel/preset-typescript": "^7.22.5",
       "@rollup/plugin-babel": "^6.0.3",
       "@types/babel__core": "^7.20.1",
+      "@types/babel__generator": "^7.6.4",
       "@typescript-eslint/eslint-plugin": "^6.4.1",
       "@typescript-eslint/parser": "^6.4.1",
       "eslint": "^8.47.0",
@@ -61,10 +65,12 @@
       "prettier": "^3.0.2",
       "rollup": "^3.28.1",
       "rollup-plugin-delete": "^2.0.0",
-      "typescript": "^5.1.6"
+      "typescript": "^5.2.2"
    },
    "dependencies": {
-      "@babel/plugin-syntax-jsx": "^7.22.5",
+      "@babel/core": "8.0.0-alpha.2",
+      "@babel/generator": "8.0.0-alpha.2",
+      "@babel/types": "8.0.0-alpha.2",
       "javascript-stringify": "^2.1.0",
       "merge-anything": "^5.1.7",
       "picocolors": "^1.0.0"
