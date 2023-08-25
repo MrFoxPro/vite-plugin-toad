@@ -274,6 +274,8 @@ export default function (options: VitePluginToadOptions): Plugin {
                   return
                }
                output = ssrModule[TODAD_IDENTIFIER].output
+               // @ts-ignore
+               output.ast = JSON.parse(output.ast)
             } else {
                output = await transformModuleGenerateStyles(id, code)
             }
@@ -431,7 +433,7 @@ if (import.meta.hot) {
 
             const output = await transformModuleGenerateStyles(id, code)
 
-            const jsifiedOutput = stringify({ output }, (value, space, next, key) => {
+            const jsifiedOutput = stringify({ output: {...output, ast: JSON.stringify(output.ast)} }, (value, space, next, key) => {
                if (typeof value === "string") return `\`${value}\``
                return next(value)
             })

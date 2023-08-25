@@ -29,7 +29,7 @@ export default async ({ mode }: ConfigEnv) => {
             solid: {
                generate: "dom"
             },
-            // include: [/(\.svg)|(.(t|j)sx?)/],
+            include: [/(\.svg)|(.(t|j)sx?)/],
          }),
          ViteSolidSVG({
             defaultAsComponent: true,
