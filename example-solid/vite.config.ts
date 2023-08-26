@@ -22,6 +22,9 @@ export default async ({ mode }: ConfigEnv) => {
       preview: {
          port: 3000
       },
+      ssr: {
+         
+      },
       plugins: [
          ViteSolid({
             hot: dev,
@@ -47,7 +50,9 @@ export default async ({ mode }: ConfigEnv) => {
             exclude: [/\.svg/],
             ssr: {
                eval: true,
-               babelOptions: { presets: [["solid", { generate: "ssr", hydratable: false }]] },
+               babelOptions: { 
+                  presets: [["solid", { generate: "ssr", hydratable: false }]]
+             },
             }
          }),
          VitePluginInspect({

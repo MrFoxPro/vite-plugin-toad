@@ -334,7 +334,8 @@ export default function (options: VitePluginToadOptions): Plugin {
                   )
                   return
                }
-               output = ssrModule[TODAD_IDENTIFIER].output
+               output = tMap.get(vModId)
+               output.styles = ssrModule[TODAD_IDENTIFIER].styles
             } else {
                if (options.mode === "babel") {
                   output = await transformBabelModuleGenerateStyles(id, code)
@@ -433,6 +434,7 @@ if (import.meta.hot) {
       }
    }
 
+   const tMap = new Map<string, string>()
    const ssr: Plugin = {
       name: "toad:ssr",
       enforce: "post",
@@ -489,11 +491,13 @@ if (import.meta.hot) {
                output = await transformRegexModuleGenerateStyles(id, code)
             }
 
-            const jsifiedOutput = stringify({ output }, (value, space, next, key) => {
+            const jsifiedStyles = stringify({ styles: output.styles }, (value, space, next, key) => {
                if (typeof value === "string") return `\`${value}\``
                return next(value)
             })
-            output.transformed.code += `export const ${TODAD_IDENTIFIER} = ${jsifiedOutput}`
+            output.transformed.code += `export const ${TODAD_IDENTIFIER} = ${jsifiedStyles}`
+            output.styles = null
+            tMap.set(id, output)
 
             return output.transformed
          }

@@ -9,6 +9,12 @@ import Constants from "./dep1.js"
 
 import LogoIcon from "#logo.svg"
 
+
+const randomThing = 5
+
+const randomTemplate = `
+   Hello: ${randomThing}
+`
 css`
    /*global*/ /* mark style as global */
    body {
