@@ -420,12 +420,10 @@ if (import.meta.hot) {
 }`
 
             // After updating styles, need to refetch them
-            if (wasSheetChanged) {
-               const sMod = server.moduleGraph.getModuleById(target.vStyleId)
-               if (sMod) {
-                  server.moduleGraph.invalidateModule(sMod)
-                  sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
-               }
+            const sMod = server.moduleGraph.getModuleById(target.vStyleId)
+            if (sMod) {
+               server.moduleGraph.invalidateModule(sMod)
+               sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
             }
             return output.transformed
          }
