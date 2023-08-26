@@ -16,32 +16,12 @@ export type VitePluginToadOptions = {
     */
    tag?: string
    /**
-    * This enables transformation of `css`.
-    * ```
-    * css={css`
-    *    color: red;
-    *  `}
-    * ```
-    * will be merged to `class` tag.
-    * Note: this uses babel transform.
-    * You can use it separately by importing from `vite-plugin-toad/babel-plugin-css-attribute`
-    * For example, you can combine it with `Solid` babel options. It could be slightly faster then.
-    *
-    * For Typescript compitability, see example in `example-solid/css-attr.d.ts`
-    * @default false
-    */
-   customAttribute?: {
-      enable: boolean
-      name: string
-   }
-
-   /**
     * Callback to decide if file should be processed
     * You can use it to avoid parsing unnescessary files
     * @default null
     */
-   shouldProcessFile?(url: string, code: string): boolean;
-   
+   shouldProcessFile?(url: string, code: string): boolean
+
    ssr?: {
       /**
        * Load module to evaluate emplate strings
@@ -49,7 +29,33 @@ export type VitePluginToadOptions = {
        */
       eval?: boolean
    }
-   mode?: 'regex' | 'babel';
+
    createClassName?(ctx: { filename: string; isGlobal: boolean; debugName: string; hash: string }): string
    createStyle?(className: string, template: string, isGlobal: boolean): string
-}
+} & (
+   | {
+        mode?: "regex"
+     }
+   | {
+        mode?: "babel"
+
+        /**
+         * This enables transformation of `css`.
+         * ```
+         * css={css`
+         *    color: red;
+         *  `}
+         * ```
+         * will be merged to `class` tag.
+         * Note: this uses babel transform.
+         * You can use it separately by importing from `vite-plugin-toad/babel-plugin-css-attribute`
+         * For example, you can combine it with `Solid` babel options. It could be slightly faster then.
+         *
+         * For Typescript compitability, see example in `example-solid/css-attr.d.ts`
+         * @default false
+         */
+        customAttribute?: {
+           name: string
+        }
+     }
+)

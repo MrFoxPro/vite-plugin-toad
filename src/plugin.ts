@@ -24,7 +24,6 @@ export default function (options: VitePluginToadOptions): Plugin {
             eval: false
          },
          customAttribute: {
-            enable: false,
             name: "css"
          }
       } satisfies VitePluginToadOptions,
@@ -161,7 +160,9 @@ export default function (options: VitePluginToadOptions): Plugin {
       transformed: { code: string; map?: any }
    }
 
+   // @ts-ignore
    const preparedBabelCssAttributePlugin = [BabelPluginCssAttribute, { attribute: options.customAttribute.name }]
+
    function transformBabelModuleGenerateStyles(id: string, code: string) {
       const filename = Path.basename(id)
 
@@ -194,7 +195,9 @@ export default function (options: VitePluginToadOptions): Plugin {
             }
          }
       ]
-      if (options.customAttribute.enable) {
+
+      // @ts-ignore
+      if (options.customAttribute?.name) {
          plugins.push(preparedBabelCssAttributePlugin)
       }
 
