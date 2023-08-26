@@ -162,7 +162,7 @@ export default function (options: VitePluginToadOptions): Plugin {
    }
 
    const preparedBabelCssAttributePlugin = [BabelPluginCssAttribute, { attribute: options.customAttribute.name }]
-   async function transformBabelModuleGenerateStyles(id: string, code: string) {
+   function transformBabelModuleGenerateStyles(id: string, code: string) {
       const filename = Path.basename(id)
 
       const output: ProcessedModuleOutput = {
@@ -202,7 +202,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       if (/\.(t|j)sx/.test(id)) babelParserPlugins.push("jsx")
       if (/\.tsx?/.test(id)) babelParserPlugins.push("typescript")
       // @ts-ignore
-      output.transformed = await babel.transformAsync(code, {
+      output.transformed = babel.transformSync(code, {
          filename,
          parserOpts: { plugins: babelParserPlugins },
          plugins
@@ -214,7 +214,7 @@ export default function (options: VitePluginToadOptions): Plugin {
    }
 
    let styleRegex: RegExp
-   async function transformRegexModuleGenerateStyles(id: string, code: string) {
+   function transformRegexModuleGenerateStyles(id: string, code: string) {
       const filename = Path.basename(id)
 
       const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
@@ -321,9 +321,9 @@ export default function (options: VitePluginToadOptions): Plugin {
 
             let output: ProcessedModuleOutput
             if (options.mode === "babel") {
-               output = await transformBabelModuleGenerateStyles(id, code)
+               output = transformBabelModuleGenerateStyles(id, code)
             } else {
-               output = await transformRegexModuleGenerateStyles(id, code)
+               output = transformRegexModuleGenerateStyles(id, code)
             }
             if (!output.styles.length) return
 
