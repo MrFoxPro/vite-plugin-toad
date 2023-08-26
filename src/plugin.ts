@@ -409,7 +409,6 @@ export default function (options: VitePluginToadOptions): Plugin {
                target.style.sheet = sheet
                target.style.hash = slugify(sheet)
             }
-
             output.transformed.code = `import "${target.vStyleId}"\n` + output.transformed.code
 
             if (env.command === "serve" && !opts?.ssr)
@@ -421,11 +420,11 @@ if (import.meta.hot) {
 }`
 
             // After updating styles, need to refetch them
-            const sMod = server.moduleGraph.getModuleById(target.vStyleId)
-            if (sMod) {
-               server.moduleGraph.invalidateModule(sMod)
-               sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
-            }
+            // const sMod = server.moduleGraph.getModuleById(target.vStyleId)
+            // if (sMod) {
+            //    server.moduleGraph.invalidateModule(sMod)
+            //    sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
+            // }
             return output.transformed
          }
       },
