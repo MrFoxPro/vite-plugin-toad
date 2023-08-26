@@ -396,6 +396,7 @@ export default function (options: VitePluginToadOptions): Plugin {
                }
             }
 
+            let wasSheetChanged = true
             const sheet = output.styles.join("\n")
             if (tIndex === -1) {
                target.style = {
@@ -404,7 +405,9 @@ export default function (options: VitePluginToadOptions): Plugin {
                }
             } else {
                target.style.sheet = sheet
-               target.style.hash = slugify(sheet)
+               const newHash = slugify(sheet)
+               wasSheetChanged = target.style.hash === newHash
+               target.style.hash = newHash
             }
             output.transformed.code = `import "${target.vStyleId}"\n` + output.transformed.code
 
@@ -417,11 +420,13 @@ if (import.meta.hot) {
 }`
 
             // After updating styles, need to refetch them
-            // const sMod = server.moduleGraph.getModuleById(target.vStyleId)
-            // if (sMod) {
-            //    server.moduleGraph.invalidateModule(sMod)
-            //    sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
-            // }
+            if (wasSheetChanged) {
+               const sMod = server.moduleGraph.getModuleById(target.vStyleId)
+               if (sMod) {
+                  server.moduleGraph.invalidateModule(sMod)
+                  sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
+               }
+            }
             return output.transformed
          }
       },
