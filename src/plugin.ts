@@ -1,11 +1,9 @@
 import * as Path from "node:path"
-import fs from "node:fs/promises"
 
 import type { ConfigEnv, ModuleNode, Plugin, ResolvedConfig, Update, ViteDevServer } from "vite"
 import { createFilter, createLogger, createServer } from "vite"
 // @ts-ignore
 import colors from "picocolors"
-import { mergeAndConcat } from "merge-anything"
 import { stringify } from "javascript-stringify"
 import * as t from "@babel/types"
 import * as babel from "@babel/core"
@@ -15,7 +13,7 @@ import type { VitePluginToadOptions } from "./options.ts"
 import BabelPluginCssAttribute from "./babel-plugin-css-attribute.ts"
 
 export default function (options: VitePluginToadOptions): Plugin {
-   options = mergeAndConcat(
+   options = Object.assign(
       {
          mode: "babel",
          include: [/\.(t|j)sx?/],
@@ -29,7 +27,6 @@ export default function (options: VitePluginToadOptions): Plugin {
             enable: false,
             name: "css"
          },
-         babelOptions: {}
       } satisfies VitePluginToadOptions,
       options
    )
@@ -205,17 +202,11 @@ export default function (options: VitePluginToadOptions): Plugin {
       if (/\.(t|j)sx/.test(id)) babelParserPlugins.push("jsx")
       if (/\.tsx?/.test(id)) babelParserPlugins.push("typescript")
       // @ts-ignore
-      output.transformed = await babel.transformAsync(
-         code,
-         mergeAndConcat(
-            {
-               filename,
-               parserOpts: { plugins: babelParserPlugins },
-               plugins
-            },
-            options.babelOptions
-         )
-      )
+      output.transformed = await babel.transformAsync(code, {
+         filename,
+         parserOpts: { plugins: babelParserPlugins },
+         plugins
+      })
 
       output.ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
 

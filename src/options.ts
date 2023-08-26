@@ -34,7 +34,6 @@ export type VitePluginToadOptions = {
       enable: boolean
       name: string
    }
-   babelOptions?: TransformOptions
    ssr?: {
       /**
        * Load module to evaluate emplate strings
