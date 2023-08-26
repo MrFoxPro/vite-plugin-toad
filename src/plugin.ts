@@ -347,9 +347,6 @@ export default function (options: VitePluginToadOptions): Plugin {
                   }
                }
             }
-
-            console.log("toad:main working on", id)
-
             let output: ProcessedModuleOutput
             if (options.mode === "babel") {
                output = transformBabelModuleGenerateStyles(id, code)
