@@ -1,11 +1,11 @@
 import path from "node:path"
 
 import ViteSvgJsx from 'vite-plugin-svg-jsx'
-import ViteSolidSVG from "vite-plugin-solid-svg"
-import type { Options as SolidOptions } from "vite-plugin-solid"
-import ViteSolid from "vite-plugin-solid"
+// import ViteSolidSVG from "vite-plugin-solid-svg"
+// import ViteSolid from "vite-plugin-solid"
 import VitePluginInspect from "vite-plugin-inspect"
 import type { ConfigEnv, UserConfig } from "vite"
+import ViteSolid from "@foxpro/vite-plugin-solid"
 
 import ViteToad from "../src/plugin"
 
@@ -31,15 +31,20 @@ export default async ({ mode }: ConfigEnv) => {
             },
             include: [/(\.svg)|(.(t|j)sx?)/],
          }),
-         ViteSolidSVG({
-            defaultAsComponent: true,
-         }),
-         // ViteSvgJsx(),
+         // ViteSolidSVG({
+         //    defaultAsComponent: true,
+         // }),
+         ViteSvgJsx(),
          ViteToad({
+            mode: 'regex',
             // outputExtension: '.scss',
             tag: "css",
-            transformCssAttribute: true,
+            customAttribute: {
+               enable: true,
+               name: 'css'
+            },
             // include: [],
+            exclude: [/\.svg/],
             ssr: {
                eval: true,
                babelOptions: { presets: [["solid", { generate: "ssr", hydratable: false }]] },

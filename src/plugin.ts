@@ -8,22 +8,23 @@ import colors from "picocolors"
 import { mergeAndConcat } from "merge-anything"
 import { stringify } from "javascript-stringify"
 import * as t from "@babel/types"
-import generate from "@babel/generator"
 import * as babel from "@babel/core"
 
 import { slugify } from "./slugify.ts"
 import type { VitePluginToadOptions } from "./options.ts"
+import BabelPluginCssAttribute from "./babel-plugin-css-attribute.ts"
+
 export default function (options: VitePluginToadOptions): Plugin {
    options = mergeAndConcat(
       {
+         mode: "babel",
          include: [/\.(t|j)sx?/],
          exclude: [/node_modules/],
          tag: "css",
          outputExtension: ".css",
          ssr: {
             eval: false,
-            babelOptions: {},
-            forceEsbuildOnDependencies: []
+            babelOptions: {}
          },
          customAttribute: {
             enable: false,
@@ -140,42 +141,102 @@ export default function (options: VitePluginToadOptions): Plugin {
    const findTargetByVirtualStyleId = (vStyleId: string) => targets.find((x) => x.vStyleId === vStyleId)
    const findTargetByRealModuleId = (modId: string) => targets.find((x) => x.realModuleId === modId)
 
-   async function transformModuleGenerateStyles(id: string, code: string) {
+   function processTemplate(template: string, ctx: { filename: string }) {
+      const isGlobal = /[\s]*\/\*global\*\//.test(template)
+      const debugName = template.match(/\/\*@toad-debug[\s]+(?<debug>.+)\*\//)?.groups?.debug
+
+      const hash = getIndependentStyleHash(template)
+      const className = createClassName({
+         debugName,
+         isGlobal,
+         hash,
+         filename: ctx.filename.replace(Path.extname(ctx.filename), "")
+      })
+      const style = createStyle(className, template, isGlobal)
+      return { className, style }
+   }
+
+   type ProcessedModuleOutput = {
+      type: "regex" | "babel"
+      ext: string
+      styles: string[]
+      transformed: { code: string; map?: any }
+   }
+
+   async function transformBabelModuleGenerateStyles(id: string, code: string) {
       const filename = Path.basename(id)
-      const ast = await babel.parseAsync(code, { filename, parserOpts: { plugins: ["jsx", "typescript"] } })
-      const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
-      const output = {
-         ext,
+
+      const output: ProcessedModuleOutput = {
+         type: "babel",
+         ext: null,
          styles: [] as string[],
-         ast
-      }
-      babel.traverse(ast, {
-         TaggedTemplateExpression(path, state) {
-            const node = path.node
-            if (node.tag.type !== "Identifier") return
-            if (node.tag.name !== options.customAttribute.name) return
-
-            // remove ` from start and end
-            const template = code.slice(node.quasi.start + 1, node.quasi.end - 1)
-
-            const isGlobal = /[\s]*\/\*global\*\//.test(template)
-            const debugName = template.match(/\/\*@toad-debug[\s]+(?<debug>.+)\*\//)?.groups?.debug
-
-            const hash = getIndependentStyleHash(template)
-            const className = createClassName({
-               debugName,
-               isGlobal,
-               hash,
-               filename: filename.replace(Path.extname(filename), "")
-            })
-            const style = createStyle(className, template, isGlobal)
-
-            path.replaceWith(t.stringLiteral(className))
-
-            output.styles.push(style)
+         transformed: {
+            code: null,
+            map: null
          }
+      }
+
+      const plugins: babel.PluginItem[] = [
+         {
+            visitor: {
+               TaggedTemplateExpression(path, state) {
+                  const node = path.node
+                  if (node.tag.type !== "Identifier") return
+                  if (node.tag.name !== options.tag) return
+
+                  // remove ` from start and end
+                  const template = code.slice(node.quasi.start + 1, node.quasi.end - 1)
+
+                  const { className, style } = processTemplate(template, { filename })
+
+                  path.replaceWith(t.stringLiteral(className))
+
+                  output.styles.push(style)
+               }
+            }
+         }
+      ]
+      if (options.customAttribute.enable) {
+         plugins.push([BabelPluginCssAttribute, { attribute: options.customAttribute.name }])
+      }
+
+      // @ts-ignore
+      output.transformed = await babel.transformAsync(code, {
+         filename,
+         parserOpts: { plugins: ["jsx", "typescript"] },
+         plugins
       })
 
+      output.ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
+
+      return output
+   }
+
+   async function transformRegexModuleGenerateStyles(id: string, code: string) {
+      const filename = Path.basename(id)
+
+      const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
+      const styleRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, "gm")
+
+      const styles: string[] = []
+
+      const transformedCode = code.replaceAll(styleRegex, (substring, tag, _src) => {
+         const template = _src.trim() as string
+         // // to match SSR with common
+         // const castrated = src.replaceAll(/\$\{.+\}/gi, "")
+         const { className, style } = processTemplate(template, { filename })
+         styles.push(style)
+         return `"${className}"`
+      })
+      // TODO sourcemaps
+      const output: ProcessedModuleOutput = {
+         type: "regex",
+         ext,
+         styles,
+         transformed: {
+            code: transformedCode
+         }
+      }
       return output
    }
 
@@ -255,7 +316,7 @@ export default function (options: VitePluginToadOptions): Plugin {
                return
             }
 
-            let output: Awaited<ReturnType<typeof transformModuleGenerateStyles>>
+            let output: ProcessedModuleOutput
 
             const vModId = getModuleVirtualId(id)
             if (options.ssr?.eval) {
@@ -274,10 +335,12 @@ export default function (options: VitePluginToadOptions): Plugin {
                   return
                }
                output = ssrModule[TODAD_IDENTIFIER].output
-               // @ts-ignore
-               output.ast = JSON.parse(output.ast)
             } else {
-               output = await transformModuleGenerateStyles(id, code)
+               if (options.mode === "babel") {
+                  output = await transformBabelModuleGenerateStyles(id, code)
+               } else {
+                  output = await transformRegexModuleGenerateStyles(id, code)
+               }
             }
 
             if (!output.styles.length) {
@@ -307,8 +370,16 @@ export default function (options: VitePluginToadOptions): Plugin {
                target.style.hash = slugify(sheet)
             }
 
-            // @ts-ignore
-            output.ast.program.body.unshift(t.importDeclaration([], t.stringLiteral(target.vStyleId)))
+            output.transformed.code = `import "${target.vStyleId}"\n` + output.transformed.code
+
+            if (env.command === "serve" && !opts?.ssr) {
+               output.transformed.code += `
+if (import.meta.hot) {
+   try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${vModId}", "${target.style.hash}"]) }
+   catch(e) { console.warn('${WS_EVENT_PREFIX}', e) }
+   if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 300))
+}`
+            }
 
             // After updating styles, need to refetch them
             const sMod = server.moduleGraph.getModuleById(target.vStyleId)
@@ -317,16 +388,7 @@ export default function (options: VitePluginToadOptions): Plugin {
                sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
             }
 
-            const result = generate(output.ast, { sourceFileName: Path.basename(id) }, code)
-            if (env.command === "serve" && !opts?.ssr) {
-               result.code += `
-if (import.meta.hot) {
-   try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${vModId}", "${target.style.hash}"]) }
-   catch(e) { console.warn('${WS_EVENT_PREFIX}', e) }
-   if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 300))
-}`
-            }
-            return result
+            return output.transformed
          }
       },
       buildEnd() {
@@ -371,14 +433,9 @@ if (import.meta.hot) {
       }
    }
 
-   let dependencies: Set<string>
-   const ssrDepsFilter = createFilter(options.ssr.forceEsbuildOnDependencies)
    const ssr: Plugin = {
       name: "toad:ssr",
       enforce: "post",
-      configResolved(config) {
-         dependencies = new Set<string>()
-      },
       async resolveId(url, importer, options) {
          const [id, qs] = url.split("?")
 
@@ -386,9 +443,6 @@ if (import.meta.hot) {
             return
          }
          const res = await this.resolve(url, getModuleRealId(importer), options)
-         if (res) {
-            dependencies.add(res.id)
-         }
          return res.id
       },
       load: {
@@ -410,9 +464,6 @@ if (import.meta.hot) {
          order: "pre",
          async handler(code, url, opts) {
             const [id, qs] = url.split("?")
-            // if (dependencies.has(id) && ssrDepsFilter(url)) {
-            //    return transformWithEsbuild(code, id)
-            // }
 
             if (!filter(id) || !opts?.ssr) {
                return
@@ -431,20 +482,20 @@ if (import.meta.hot) {
                }
             }
 
-            const output = await transformModuleGenerateStyles(id, code)
+            let output: ProcessedModuleOutput
+            if (options.mode === "babel") {
+               output = await transformBabelModuleGenerateStyles(id, code)
+            } else {
+               output = await transformRegexModuleGenerateStyles(id, code)
+            }
 
-            const jsifiedOutput = stringify({ output: {...output, ast: JSON.stringify(output.ast)} }, (value, space, next, key) => {
+            const jsifiedOutput = stringify({ output }, (value, space, next, key) => {
                if (typeof value === "string") return `\`${value}\``
                return next(value)
             })
-            const ssrExport = `export const ${TODAD_IDENTIFIER} = ${jsifiedOutput}`
-            const result = await babel.transformFromAstAsync(output.ast.program, code, {
-               ...options.ssr.babelOptions,
-               sourceFileName: Path.basename(id)
-            })
-            result.code += ssrExport
-            await fs.writeFile("./ssr.js", result.code, { encoding: "utf-8" })
-            return { code: result.code, map: result.map }
+            output.transformed.code += `export const ${TODAD_IDENTIFIER} = ${jsifiedOutput}`
+
+            return output.transformed
          }
       },
       buildEnd(error) {

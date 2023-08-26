@@ -11,8 +11,8 @@ export default ({ types: t }: typeof babel, options: BabelPluginCSSAttributeOpti
       },
       options
    )
-
    return {
+      name: "jsx-css-attribute",
       visitor: {
          JSXElement(path, state) {
             path.traverse({
@@ -36,7 +36,7 @@ export default ({ types: t }: typeof babel, options: BabelPluginCSSAttributeOpti
                      return
                   }
 
-                  let targetValue: string
+                  let targetExpr: babel.types.StringLiteral | babel.types.Expression
 
                   for (const node of attributes) {
                      // some weird attribute
@@ -46,24 +46,26 @@ export default ({ types: t }: typeof babel, options: BabelPluginCSSAttributeOpti
                      if (node.name.name !== options.attribute) continue
 
                      if (t.isStringLiteral(node.value)) {
-                        targetValue = node.value.value
-                     } else if (
-                        t.isJSXExpressionContainer(node.value) &&
-                        t.isStringLiteral(node.value.expression)
-                     ) {
-                        targetValue = node.value.expression.value
+                        targetExpr = node.value
+                     } else if (t.isJSXExpressionContainer(node.value)) {
+                        if (
+                           t.isStringLiteral(node.value.expression) ||
+                           t.isTaggedTemplateExpression(node.value.expression)
+                        ) {
+                           targetExpr = node.value.expression
+                        }
                      }
 
-                     if (!targetValue) {
+                     if (!targetExpr) {
                         console.warn(node.value.type, "is not supported for", options.attribute, "attribute")
                      }
                      break
                   }
 
-                  if (!targetValue) return
+                  if (!targetExpr) return
 
                   if (!classAttr) {
-                     const newAttr = t.jsxAttribute(t.jsxIdentifier("class"), t.stringLiteral(targetValue))
+                     const newAttr = t.jsxAttribute(t.jsxIdentifier("class"), t.jsxExpressionContainer(targetExpr))
                      path.node.attributes.push(newAttr)
                      return
                   }
@@ -78,13 +80,12 @@ export default ({ types: t }: typeof babel, options: BabelPluginCSSAttributeOpti
                      left = classAttr.value.expression
                   } else if (t.isStringLiteral(classAttr.value)) {
                      left = classAttr.value
-                  }
-                  else {
+                  } else {
                      console.warn("Your", classAttr.name.name, "attribute is malformed")
                      return
                   }
                   left = t.parenthesizedExpression(left)
-                  const right = t.stringLiteral(" " + targetValue)
+                  const right = t.stringLiteral(" " + targetExpr)
                   const newExpression = t.jsxExpressionContainer(t.binaryExpression("+", left, right))
                   classAttr.value = newExpression
                }

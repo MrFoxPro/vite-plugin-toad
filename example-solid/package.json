@@ -10,6 +10,7 @@
       "#*": "./*"
    },
    "devDependencies": {
+      "@foxpro/vite-plugin-solid": "^2.7.0",
       "@mdx-js/rollup": "^2.3.0",
       "@vite-plugin-universal/example-solid": "link:/home/foxpro/craft/vite-plugin-universal/example.solid",
       "remark-frontmatter": "^4.0.1",

@@ -48,15 +48,8 @@ export type VitePluginToadOptions = {
        * @default null
        */
       babelOptions?: TransformOptions
-
-      /**
-       * If you have plugins doesn't respect vite `ssr` argument when transforming code like Solid does:
-       * https://github.com/solidjs/vite-plugin-solid/pull/105
-       * You can specify which dependencies of module with CSS-in-JS will be transformed Esbuild
-       * @default []
-       */
-      forceEsbuildOnDependencies?: FilterPattern
    }
+   mode?: 'regex' | 'babel';
    createClassName?(ctx: { filename: string; isGlobal: boolean; debugName: string; hash: string }): string
    createStyle?(className: string, template: string, isGlobal: boolean): string
 }
