@@ -1,3 +1,3 @@
 export default {
-   BACKGROUND_COLOR: 'limegreen',
+   BACKGROUND_COLOR: 'green',
 }

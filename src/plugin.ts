@@ -129,10 +129,11 @@ export default function (options: VitePluginToadOptions): Plugin {
       realModuleId: string
       vModuleId: string
       vStyleId?: string
-      style: {
+      style?: {
          sheet: string
          hash: string
-      } // filled at runtime
+      }
+      output?: ProcessedModuleOutput // filled at runtime
    }
    // module id without extension : descriptor
    const targets: Target[] = []
@@ -315,10 +316,32 @@ export default function (options: VitePluginToadOptions): Plugin {
             if (!filter(id) || isVirtualId(id) || qs?.includes(QS_FULL_SKIP)) {
                return
             }
+            const vModId = getModuleVirtualId(id)
 
             let output: ProcessedModuleOutput
+            if (options.mode === "babel") {
+               output = await transformBabelModuleGenerateStyles(id, code)
+            } else {
+               output = await transformRegexModuleGenerateStyles(id, code)
+            }
 
-            const vModId = getModuleVirtualId(id)
+            let target: Target
+            const tIndex = targets.findIndex((t) => t.realModuleId === id)
+            const vStyleId = getStyleVirtualID(getBaseId(id) + (output.ext ?? options.outputExtension))
+            if (tIndex === -1) {
+               target = {
+                  realModuleId: id,
+                  vModuleId: getModuleVirtualId(id),
+                  vStyleId: vStyleId,
+                  output
+               }
+               targets.push(target)
+            } else {
+               target = targets[tIndex]
+               target.vStyleId = vStyleId
+               target.output = output
+            }
+
             if (options.ssr?.eval) {
                const prevFakeModuke = server.moduleGraph.getModuleById(vModId)
                if (prevFakeModuke) {
@@ -334,53 +357,32 @@ export default function (options: VitePluginToadOptions): Plugin {
                   )
                   return
                }
-               output = tMap.get(vModId)
                output.styles = ssrModule[TODAD_IDENTIFIER].styles
-            } else {
-               if (options.mode === "babel") {
-                  output = await transformBabelModuleGenerateStyles(id, code)
-               } else {
-                  output = await transformRegexModuleGenerateStyles(id, code)
-               }
             }
-
             if (!output.styles.length) {
                return
             }
 
             const sheet = output.styles.join("\n")
-
-            let target: Target
-            const tIndex = targets.findIndex((t) => t.realModuleId === id)
-            const vStyleId = getStyleVirtualID(getBaseId(id) + (output.ext ?? options.outputExtension))
             if (tIndex === -1) {
-               target = {
-                  realModuleId: id,
-                  vModuleId: getModuleVirtualId(id),
-                  vStyleId: vStyleId,
-                  style: {
-                     sheet,
-                     hash: slugify(sheet)
-                  }
+               target.style = {
+                  sheet,
+                  hash: slugify(sheet)
                }
-               targets.push(target)
             } else {
-               target = targets[tIndex]
-               target.vStyleId = vStyleId
                target.style.sheet = sheet
                target.style.hash = slugify(sheet)
             }
 
             output.transformed.code = `import "${target.vStyleId}"\n` + output.transformed.code
 
-            if (env.command === "serve" && !opts?.ssr) {
+            if (env.command === "serve" && !opts?.ssr)
                output.transformed.code += `
 if (import.meta.hot) {
    try { await import.meta.hot.send('${WS_EVENT_PREFIX}', ["${vModId}", "${target.style.hash}"]) }
    catch(e) { console.warn('${WS_EVENT_PREFIX}', e) }
    if (!import.meta.url.includes('?')) await new Promise(resolve => setTimeout(resolve, 300))
 }`
-            }
 
             // After updating styles, need to refetch them
             const sMod = server.moduleGraph.getModuleById(target.vStyleId)
@@ -389,6 +391,7 @@ if (import.meta.hot) {
                sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
             }
 
+            output.transformed.map = null
             return output.transformed
          }
       },
@@ -400,6 +403,7 @@ if (import.meta.hot) {
          if (!filter(ctx.file)) {
             return
          }
+
          const affected = server.moduleGraph.getModulesByFile(ctx.file) ?? new Set<ModuleNode>()
          for (const mod of ctx.modules) {
             affected.add(mod)
@@ -410,7 +414,7 @@ if (import.meta.hot) {
          }
 
          for (const mod of affected) {
-            const importers = Array.from(mod.importers).filter((m) => targets.some((e) => e.realModuleId === m.id))
+            const importers = Array.from(mod.importers).filter((m) => targets.some((e) => e.vModuleId === m.id))
             if (importers.length) {
                logger.info(`${colors.blue(`Found targets to include in as dependency in HMR:`)}`, {
                   timestamp: true
@@ -420,7 +424,10 @@ if (import.meta.hot) {
                })
                // add each importer of `mod` that contains css-in-js to HMR
                for (const importer of importers) {
-                  affected.add(importer)
+                  const target = findTargetByVirtualModuleId(importer.id)
+                  if (!target) continue
+                  const m = server.moduleGraph.getModuleById(target.realModuleId)
+                  if (m) affected.add(m)
                }
             }
             // if there is toad file for this affected module
@@ -430,11 +437,11 @@ if (import.meta.hot) {
                if (toadMod) affected.add(toadMod)
             }
          }
+         
          return Array.from(affected)
       }
    }
 
-   const tMap = new Map<string, string>()
    const ssr: Plugin = {
       name: "toad:ssr",
       enforce: "post",
@@ -457,6 +464,7 @@ if (import.meta.hot) {
                const content = await fs.readFile(realId, { encoding: "utf-8" })
                return content
             }
+
             if (isVirtualStyleId(id)) {
                return ""
             }
@@ -470,36 +478,18 @@ if (import.meta.hot) {
             if (!filter(id) || !opts?.ssr) {
                return
             }
-            const isVirtualMod = isVirtualModuleId(id)
-            const mod = server.moduleGraph.getModuleById(id)
 
-            // If it's not virtual module, we only need to process it in case if it's imported by virtual module
-            if (!isVirtualMod) {
-               if (!mod?.importers?.size) {
-                  return
-               }
-               const importers = Array.from(mod.importers)
-               if (!importers.some((importer) => isVirtualModuleId(importer.id))) {
-                  return
-               }
-            }
+            if (!isVirtualModuleId(id)) return
 
-            let output: ProcessedModuleOutput
-            if (options.mode === "babel") {
-               output = await transformBabelModuleGenerateStyles(id, code)
-            } else {
-               output = await transformRegexModuleGenerateStyles(id, code)
-            }
+            const target = findTargetByVirtualModuleId(id)
+            if (!target?.output) return
 
-            const jsifiedStyles = stringify({ styles: output.styles }, (value, space, next, key) => {
+            const jsifiedStyles = stringify({ styles: target.output.styles }, (value, space, next, key) => {
                if (typeof value === "string") return `\`${value}\``
                return next(value)
             })
-            output.transformed.code += `export const ${TODAD_IDENTIFIER} = ${jsifiedStyles}`
-            output.styles = null
-            tMap.set(id, output)
 
-            return output.transformed
+            return target.output.transformed.code + `export const ${TODAD_IDENTIFIER} = ${jsifiedStyles}`
          }
       },
       buildEnd(error) {
