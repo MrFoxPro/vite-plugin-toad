@@ -324,6 +324,7 @@ export default function (options: VitePluginToadOptions): Plugin {
             } else {
                output = await transformRegexModuleGenerateStyles(id, code)
             }
+            if(!output.styles.length) return
 
             let target: Target
             const tIndex = targets.findIndex((t) => t.realModuleId === id)
@@ -351,17 +352,19 @@ export default function (options: VitePluginToadOptions): Plugin {
                if (ssrModule instanceof Error) {
                   logger.error(
                      "There was an error when evaluating module in SSR mode." +
-                        "\nMake sure you specified needed SSR configuration via `ssr.babelOptions` and `ssr.forceEsbuildOnDependencies` plugin options\n" +
+                        "\nMake sure you specified needed SSR configuration via `ssr` plugin options\n" +
                         ssrModule.toString(),
                      { error: ssrModule }
                   )
                   return
                }
                output.styles = ssrModule[TODAD_IDENTIFIER].styles
+
+               if (!output.styles.length) {
+                  return
+               }
             }
-            if (!output.styles.length) {
-               return
-            }
+
 
             const sheet = output.styles.join("\n")
             if (tIndex === -1) {
