@@ -244,6 +244,8 @@ export default function (options: VitePluginToadOptions): Plugin {
       return output
    }
 
+   const inSsrProcessing = new WeakMap<Target, boolean>()
+
    const main: Plugin = {
       name: "toad:main",
       enforce: "pre",
@@ -260,6 +262,12 @@ export default function (options: VitePluginToadOptions): Plugin {
             const target = findTargetByVirtualModuleId(id)
             if (target?.style?.hash !== hash) {
                sendHmrUpdate(targets.map((x) => x.realModuleId))
+            }
+         })
+         server.watcher.on("unlink", (p) => {
+            const target = findTargetByRealModuleId(p)
+            if (target) {
+               targets.splice(targets.indexOf(target), 1)
             }
          })
       },
@@ -295,22 +303,23 @@ export default function (options: VitePluginToadOptions): Plugin {
       },
 
       async buildStart(options) {
-         if (!server) {
-            logger.info(`${colors.blue(`Starting dev server for SSR`)}`, { timestamp: true })
-            server = await createServer({
-               configFile: false,
-               base: config.base,
-               root: config.root,
-               resolve: config.resolve,
-               mode: "production",
-               logLevel: "silent",
-               server: {
-                  middlewareMode: true
-               },
-               // @ts-ignore
-               plugins: config.plugins.filter((pl) => !pl.name.startsWith("vite:"))
-            })
-         }
+         if (server) return
+         logger.info(`${colors.blue(`Starting dev server for SSR`)}`, { timestamp: true })
+
+         server = await createServer({
+            configFile: false,
+            base: config.base,
+            root: config.root,
+            resolve: config.resolve,
+            mode: "production",
+            logLevel: "silent",
+            server: {
+               middlewareMode: true
+            },
+            // @ts-ignore
+            plugins: config.plugins.filter((pl) => !pl.name.startsWith("vite:") && pl.name !== main.name)
+         })
+
          return
       },
       transform: {
@@ -320,10 +329,26 @@ export default function (options: VitePluginToadOptions): Plugin {
             if (!filter(id) || isVirtualId(id) || qs?.includes(QS_FULL_SKIP)) {
                return
             }
-
             if (options.shouldProcessFile && !options.shouldProcessFile(url, code)) return
 
-            const vModId = getModuleVirtualId(id)
+            const tIndex = targets.findIndex((t) => t.realModuleId === id)
+            if (tIndex !== -1 && inSsrProcessing.get(targets[tIndex]) === true) {
+               return
+            }
+
+            const info = server.moduleGraph.getModuleById(id)
+            if (info?.importers) {
+               for (const importer of info.importers) {
+                  if (isVirtualModuleId(importer.id)) {
+                     const importerTarget = findTargetByVirtualModuleId(importer.id)
+                     if (inSsrProcessing.get(importerTarget) === true) {
+                        return
+                     }
+                  }
+               }
+            }
+
+            console.log("toad:main working on", id)
 
             let output: ProcessedModuleOutput
             if (options.mode === "babel") {
@@ -334,7 +359,6 @@ export default function (options: VitePluginToadOptions): Plugin {
             if (!output.styles.length) return
 
             let target: Target
-            const tIndex = targets.findIndex((t) => t.realModuleId === id)
             const vStyleId = getStyleVirtualID(getBaseId(id) + (output.ext ?? options.outputExtension))
             if (tIndex === -1) {
                target = {
@@ -350,12 +374,15 @@ export default function (options: VitePluginToadOptions): Plugin {
                target.output = output
             }
 
+            const vModId = getModuleVirtualId(id)
             if (options.ssr?.eval) {
                const prevFakeModuke = server.moduleGraph.getModuleById(vModId)
                if (prevFakeModuke) {
                   server.moduleGraph.invalidateModule(prevFakeModuke)
                }
+               inSsrProcessing.set(target, true)
                const ssrModule = await server.ssrLoadModule(vModId, { fixStacktrace: true }).catch((_) => _)
+               inSsrProcessing.set(target, false)
                if (ssrModule instanceof Error) {
                   logger.error(
                      "There was an error when evaluating module in SSR mode." +
