@@ -39,7 +39,7 @@ export default async ({ mode }: ConfigEnv) => {
          // }),
          ViteSvgJsx(),
          ViteToad({
-            mode: 'regex',
+            mode: 'babel',
             // outputExtension: '.scss',
             tag: "css",
             customAttribute: {
@@ -50,9 +50,6 @@ export default async ({ mode }: ConfigEnv) => {
             exclude: [/\.svg/],
             ssr: {
                eval: true,
-               babelOptions: { 
-                  presets: [["solid", { generate: "ssr", hydratable: false }]]
-             },
             }
          }),
          VitePluginInspect({

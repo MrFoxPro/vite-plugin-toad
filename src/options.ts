@@ -41,13 +41,6 @@ export type VitePluginToadOptions = {
        * @default false
        */
       eval?: boolean
-      /**
-       * If you have plugins doesn't respect vite `ssr` argument when transforming code like Solid does:
-       * https://github.com/solidjs/vite-plugin-solid/pull/105
-       * You can provide additional options to transform module for SSR mode.
-       * @default null
-       */
-      babelOptions?: TransformOptions
    }
    mode?: 'regex' | 'babel';
    createClassName?(ctx: { filename: string; isGlobal: boolean; debugName: string; hash: string }): string

@@ -2,7 +2,7 @@ import * as Path from "node:path"
 import fs from "node:fs/promises"
 
 import type { ConfigEnv, ModuleNode, Plugin, ResolvedConfig, Update, ViteDevServer } from "vite"
-import { createFilter, createLogger, createServer, transformWithEsbuild } from "vite"
+import { createFilter, createLogger, createServer } from "vite"
 // @ts-ignore
 import colors from "picocolors"
 import { mergeAndConcat } from "merge-anything"
@@ -23,13 +23,13 @@ export default function (options: VitePluginToadOptions): Plugin {
          tag: "css",
          outputExtension: ".css",
          ssr: {
-            eval: false,
-            babelOptions: {}
+            eval: false
          },
          customAttribute: {
             enable: false,
             name: "css"
-         }
+         },
+         babelOptions: {}
       } satisfies VitePluginToadOptions,
       options
    )
@@ -164,6 +164,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       transformed: { code: string; map?: any }
    }
 
+   const preparedBabelCssAttributePlugin = [BabelPluginCssAttribute, { attribute: options.customAttribute.name }]
    async function transformBabelModuleGenerateStyles(id: string, code: string) {
       const filename = Path.basename(id)
 
@@ -176,7 +177,6 @@ export default function (options: VitePluginToadOptions): Plugin {
             map: null
          }
       }
-
       const plugins: babel.PluginItem[] = [
          {
             visitor: {
@@ -198,31 +198,40 @@ export default function (options: VitePluginToadOptions): Plugin {
          }
       ]
       if (options.customAttribute.enable) {
-         plugins.push([BabelPluginCssAttribute, { attribute: options.customAttribute.name }])
+         plugins.push(preparedBabelCssAttributePlugin)
       }
 
+      const babelParserPlugins = []
+      if (/\.(t|j)sx/.test(id)) babelParserPlugins.push("jsx")
+      if (/\.tsx?/.test(id)) babelParserPlugins.push("typescript")
       // @ts-ignore
-      output.transformed = await babel.transformAsync(code, {
-         filename,
-         parserOpts: { plugins: ["jsx", "typescript"] },
-         plugins
-      })
+      output.transformed = await babel.transformAsync(
+         code,
+         mergeAndConcat(
+            {
+               filename,
+               parserOpts: { plugins: babelParserPlugins },
+               plugins
+            },
+            options.babelOptions
+         )
+      )
 
       output.ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
 
       return output
    }
 
+   let styleRegex: RegExp
    async function transformRegexModuleGenerateStyles(id: string, code: string) {
       const filename = Path.basename(id)
 
       const ext = code.match(/\/\*@toad-ext[\s]+(?<ext>.+)\*\//)?.groups?.ext
-      const styleRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, "gm")
 
       const styles: string[] = []
 
-      const transformedCode = code.replaceAll(styleRegex, (substring, tag, _src) => {
-         const template = _src.trim() as string
+      const transformedCode = code.replaceAll(styleRegex, (substring, tag, src) => {
+         const template = src.trim() as string
          // // to match SSR with common
          // const castrated = src.replaceAll(/\$\{.+\}/gi, "")
          const { className, style } = processTemplate(template, { filename })
@@ -249,6 +258,7 @@ export default function (options: VitePluginToadOptions): Plugin {
       },
       configResolved(_config) {
          config = _config
+         styleRegex = new RegExp(`(${options.tag})\\s*\`([\\s\\S]*?)\``, "gm")
       },
       configureServer(_server) {
          server = _server
@@ -324,7 +334,7 @@ export default function (options: VitePluginToadOptions): Plugin {
             } else {
                output = await transformRegexModuleGenerateStyles(id, code)
             }
-            if(!output.styles.length) return
+            if (!output.styles.length) return
 
             let target: Target
             const tIndex = targets.findIndex((t) => t.realModuleId === id)
@@ -365,7 +375,6 @@ export default function (options: VitePluginToadOptions): Plugin {
                }
             }
 
-
             const sheet = output.styles.join("\n")
             if (tIndex === -1) {
                target.style = {
@@ -393,8 +402,6 @@ if (import.meta.hot) {
                server.moduleGraph.invalidateModule(sMod)
                sMod.lastHMRTimestamp = sMod.lastInvalidationTimestamp || Date.now()
             }
-
-            output.transformed.map = null
             return output.transformed
          }
       },
@@ -440,7 +447,7 @@ if (import.meta.hot) {
                if (toadMod) affected.add(toadMod)
             }
          }
-         
+
          return Array.from(affected)
       }
    }
@@ -449,8 +456,6 @@ if (import.meta.hot) {
       name: "toad:ssr",
       enforce: "post",
       async resolveId(url, importer, options) {
-         const [id, qs] = url.split("?")
-
          if (!importer || !isVirtualModuleId(importer)) {
             return
          }
@@ -463,9 +468,8 @@ if (import.meta.hot) {
             const [id, qs] = url.split("?")
 
             if (isVirtualModuleId(id)) {
-               const realId = getModuleRealId(id)
-               const content = await fs.readFile(realId, { encoding: "utf-8" })
-               return content
+               const target = findTargetByVirtualModuleId(id)
+               return target?.output?.transformed.code
             }
 
             if (isVirtualStyleId(id)) {
@@ -476,7 +480,7 @@ if (import.meta.hot) {
       transform: {
          order: "pre",
          async handler(code, url, opts) {
-            const [id, qs] = url.split("?")
+            const [id] = url.split("?")
 
             if (!filter(id) || !opts?.ssr) {
                return
@@ -492,7 +496,7 @@ if (import.meta.hot) {
                return next(value)
             })
 
-            return target.output.transformed.code + `export const ${TODAD_IDENTIFIER} = ${jsifiedStyles}`
+            return target.output.transformed.code + `\nexport const ${TODAD_IDENTIFIER} = ${jsifiedStyles}`
          }
       },
       buildEnd(error) {
