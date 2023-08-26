@@ -34,6 +34,14 @@ export type VitePluginToadOptions = {
       enable: boolean
       name: string
    }
+
+   /**
+    * Callback to decide if file should be processed
+    * You can use it to avoid parsing unnescessary files
+    * @default null
+    */
+   shouldProcessFile?(url: string, code: string): boolean;
+   
    ssr?: {
       /**
        * Load module to evaluate emplate strings

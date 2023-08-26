@@ -26,7 +26,7 @@ export default function (options: VitePluginToadOptions): Plugin {
          customAttribute: {
             enable: false,
             name: "css"
-         },
+         }
       } satisfies VitePluginToadOptions,
       options
    )
@@ -317,6 +317,9 @@ export default function (options: VitePluginToadOptions): Plugin {
             if (!filter(id) || isVirtualId(id) || qs?.includes(QS_FULL_SKIP)) {
                return
             }
+
+            if (options.shouldProcessFile && !options.shouldProcessFile(url, code)) return
+
             const vModId = getModuleVirtualId(id)
 
             let output: ProcessedModuleOutput

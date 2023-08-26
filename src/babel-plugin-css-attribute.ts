@@ -85,8 +85,9 @@ export default ({ types: t }: typeof babel, options: BabelPluginCSSAttributeOpti
                      return
                   }
                   left = t.parenthesizedExpression(left)
-                  const right = t.stringLiteral(" " + targetExpr)
-                  const newExpression = t.jsxExpressionContainer(t.binaryExpression("+", left, right))
+
+                  const leftWithSpace = t.binaryExpression("+", left, t.stringLiteral(" "))
+                  const newExpression = t.jsxExpressionContainer(t.binaryExpression("+", leftWithSpace, targetExpr))
                   classAttr.value = newExpression
                }
             })
